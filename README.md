@@ -21,4 +21,5 @@ conda install conda-forge::matplotlib
 conda install conda-forge::librosa
 pip install PyGuitarPro
 conda install conda-forge::tqdm
-conda install conda-forge::datasets 
+conda install conda-forge::datasets
+conda install -c conda-forge ipywidgets     # for tqdm progress bar
