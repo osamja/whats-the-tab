@@ -1,0 +1,9 @@
+{
+    "launch": {
+
+        "configurations": [],
+        "compounds": []
+    },
+    "jupyter.debugJustMyCode": false,
+    "debugpy.debugJustMyCode": false
+}
