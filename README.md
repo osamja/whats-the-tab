@@ -23,6 +23,7 @@ pip install PyGuitarPro
 conda install conda-forge::tqdm
 conda install conda-forge::datasets
 conda install -c conda-forge ipywidgets     # for tqdm progress bar
+conda install conda-forge::evaluate
 
 #### dev workspace setup
 conda install -c conda-forge jupyter-console
