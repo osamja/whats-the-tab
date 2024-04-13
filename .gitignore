@@ -135,3 +135,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# ignore the mt3 directory
+mt3/
+musictranscription/audios/
