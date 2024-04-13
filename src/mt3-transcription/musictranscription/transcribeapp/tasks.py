@@ -1,13 +1,14 @@
 # tasks.py
 import datetime, uuid
 from .models import AudioMIDI
-from .ml import sayHi
+from .ml import sayHi, generate_midi_from_audio
 
 def convert_audio_to_midi(audio_id):
     audio_midi = AudioMIDI.objects.get(id=audio_id)
     # load the audio file
     audio_file = audio_midi.audio_file
-    sayHi()
+    midi_file = generate_midi_from_audio(audio_midi.id, audio_file)
+    return midi_file
     # open the audio file
     # audio_file.open(mode='rb')
     # # read the audio file

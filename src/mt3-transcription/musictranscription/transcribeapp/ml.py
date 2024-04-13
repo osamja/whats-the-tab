@@ -29,6 +29,19 @@ from mt3 import preprocessors
 from mt3 import spectrograms
 from mt3 import vocabularies
 
+import matplotlib.pyplot as plt
+from mido import MidiFile, MidiTrack
+from pydub import AudioSegment
+
+SAMPLE_RATE = 16000
+SF2_PATH = 'SGM-v2.01-Sal-Guit-Bass-V1.3.sf2'
+MODEL = "mt3" #@param["ismir2021", "mt3"]
+mt3_path = 'checkpoints'
+
+checkpoint_path = f'{mt3_path}/{MODEL}/'
+
+print(checkpoint_path)
+
 class InferenceModel(object):
   """Wrapper of T5X model for music transcription."""
 
@@ -69,8 +82,6 @@ class InferenceModel(object):
     }
 
     # Create a T5X model.
-    import pdb
-    pdb.set_trace()
     self._parse_gin(gin_files)
     self.model = self._load_model()
 
@@ -235,21 +246,207 @@ class InferenceModel(object):
       tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
     return tokens
 
+def split_mp3(audio, chunk_length_ms=2000, num_chunks=5):
+    output_dir = 'content'
+    # Load the mp3 file
+    audio = AudioSegment.from_mp3(audio.path)
+    split_filenames = []
 
-SAMPLE_RATE = 16000
-SF2_PATH = 'SGM-v2.01-Sal-Guit-Bass-V1.3.sf2'
+    # Length of the audio in milliseconds
+    length_ms = len(audio)
 
-MODEL = "mt3" #@param["ismir2021", "mt3"]
+    # Start and end points for slicing
+    start_ms = 0
+    end_ms = chunk_length_ms
 
-mt3_path = 'checkpoints'
+    file_counter = 0
 
-checkpoint_path = f'{mt3_path}/{MODEL}/'
+    # Splitting the audio
+    chunks = []
 
-# load_gtag()
-print(checkpoint_path)
-# log_event('loadModelStart', {'event_category': MODEL})
-inference_model = InferenceModel(checkpoint_path, MODEL)
-# log_event('loadModelComplete', {'event_category': MODEL})
+    while start_ms < length_ms and len(chunks) < num_chunks:
+        # Extract the chunk
+        chunk = audio[start_ms:end_ms]
+
+        # Save the chunk as a separate file
+        chunk_name = f"{output_dir}/{file_counter}.mp3"
+        chunk.export(chunk_name, format="mp3")
+        split_filenames.append(chunk_name)
+
+        # Append the chunk to the list
+        chunks.append(chunk)
+
+        # Move to the next chunk
+        start_ms = end_ms
+        end_ms += chunk_length_ms
+        file_counter += 1
+
+    return chunks, split_filenames
+
+def transcribe_audio(audio, inference_model):
+  est_ns = inference_model(audio)
+
+
+  note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
+                        sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
+  # note_seq.plot_sequence(est_ns)
+  return est_ns
+
+def download_midi(est_ns, download_path='transcription.midi'):
+  note_seq.sequence_proto_to_midi_file(est_ns, download_path)
+  # files.download('/tmp/transcribed.mid')
+
+def transcribe_and_download(split_audio, split_audio_filenames, inference_model):
+  download_filenames = []
+
+  for (audio_chunk, audio_filename) in zip(split_audio, split_audio_filenames):
+    audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
+    est_ns = transcribe_audio(audio, inference_model)
+    download_filename = audio_filename.rsplit('.', 1)[0] + '.midi'
+    download_midi(est_ns, download_filename)
+    download_filenames.append(download_filename)
+
+  return download_filenames
+
+def plot_note_on_times(midi_file_path):
+    midi_file = MidiFile(midi_file_path)
+
+    # Initialize lists to store note_on times for each track
+    note_on_times = []
+
+    for i, track in enumerate(midi_file.tracks[1:]):  # Skip the first track
+        cumulative_time = 0
+        track_times = []
+
+        for msg in track:
+            cumulative_time += msg.time
+            if msg.type == 'note_on' and msg.velocity > 0:  # Check for actual note_on event
+                track_times.append(cumulative_time)
+
+        print(f"Cumulative time: {cumulative_time} for track {i}")
+        note_on_times.append(track_times)
+
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    for i, times in enumerate(note_on_times):
+        plt.plot(times, [i+1] * len(times), 'o', label=f'Track {i+2} Note On Events')  # i+2 because we skipped the first track
+
+    plt.yticks(range(1, len(note_on_times) + 1), [f'Track {i+2}' for i in range(len(note_on_times))])
+    plt.xlabel('Time (ticks)')
+    plt.title('Note On Event Times for Tracks (Excluding First Track)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+def copy_acoustic_guitar_events(midi_files, output_file):
+    # Create a new MIDI file for the output
+    output_midi = MidiFile()
+
+    metadata_track = MidiTrack()
+    acoustic_track = MidiTrack()
+    output_midi.tracks.append(metadata_track)
+
+    end_of_track_msg = None
+
+    # Process the first MIDI file to keep its tempo and time signature
+    first_midi = MidiFile(midi_files[0])
+    for msg in first_midi.tracks[0]:
+        if msg.is_meta:
+            metadata_track.append(msg.copy())
+
+    # set the ticks per beat in output midi to be the same as first midi
+    output_midi.ticks_per_beat = first_midi.ticks_per_beat
+
+    for file_path in midi_files:
+        midi_file = MidiFile(file_path)
+
+        for track_idx, track in enumerate(midi_file.tracks):
+            # Flag to track whether we are currently copying events
+            copy_events = False
+
+            for msg_idx, msg in enumerate(track):
+                # Check for program change messages
+                if msg.type == 'program_change' and msg.program == 24:
+                    # Start copying when program 24 (acoustic guitar) is encountered
+                    copy_events = True
+                elif msg.type == 'program_change' and msg.program != 24:
+                    # Stop copying if a different program is set
+                    copy_events = False
+
+                if copy_events:
+                  # Check if acoustic track is empty
+                  if len(acoustic_track) == 0 and msg.type == 'program_change':
+                    acoustic_track.append(msg.copy())
+                    continue
+
+                  # Add end of track message if last message
+                  if msg_idx == len(track) - 1 and msg.type == 'end_of_track':
+                    end_of_track_msg = msg.copy()
+
+                  # Ignore end of track messages and program change events
+                  if msg.type == 'end_of_track' or msg.type == 'program_change':
+                      continue
+
+                  # Copy the event to the new track
+                  acoustic_track.append(msg.copy())
+
+    # Add the end of track message to the acoustic track
+    if end_of_track_msg is not None:
+        acoustic_track.append(end_of_track_msg)
+
+    output_midi.tracks.append(acoustic_track)
+    # Save the output MIDI file
+    output_midi.save(output_file)
+    return output_midi
+
+
+def delete_midi_and_mp3s():
+  # delete all the midi and mp3 files stored in /content such as /content/0.mp3, /content/0.midi, etc..
+  for file in os.listdir('/content'):
+    # do not delete 3_why_georgia or why_georgia-30.mp3
+    if file.endswith('.mp3'):
+      os.remove(os.path.join('/content', file))
+    elif file.endswith('.midi'):
+      os.remove(os.path.join('/content', file))
+
+def generate_midi_from_audio(audio_id, audio):
+  inference_model = InferenceModel(checkpoint_path, MODEL)
+
+  # TODO @sammy: use a fixed local path from host to avoid constant copy/paste
+  audio_file_paths = {
+      'short': 'why-georgia-30.mp3',
+      'long': '3_Why_Georgia.mp3'
+  }
+
+  # audio_file_path = audio_file_paths['short']
+
+  # mp3 is split into N segments of audio chunk length.
+  # To transcribe entire mp3, num_transcription_segments = len(audio) / audio_chunk_length
+  # To transcribe the first 2 seconds of an mp3, set NUM_TRANSCRIPTION_SEGMENTS to 1 assuming length is 2 seconds
+  NUM_TRANSCRIPTION_SEGMENTS = 100
+  AUDIO_CHUNK_LENGTH = 2000
+  split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+
+  # audio = upload_audio(sample_rate=SAMPLE_RATE)
+  # log_event('uploadAudioComplete', {'value': round(len(audio) / SAMPLE_RATE)})
+
+  # note_seq.notebook_utils.colab_play(audio, sample_rate=SAMPLE_RATE)
+
+  midi_files = transcribe_and_download(split_audio, split_audio_filenames, inference_model)
+
+  # Replace with the path to your MIDI file
+  midi_file_path = midi_files[0]
+  plot_note_on_times(midi_file_path)
+
+  # Copy acoustic guitar events to a new MIDI file
+  output_file = 'acoustic_guitar_only.midi'
+  acoustic_guitar_midi = copy_acoustic_guitar_events(midi_files, output_file)
+
+  print(f"Acoustic guitar events copied to '{output_file}'")
+
+  return acoustic_guitar_midi
+
 
 def sayHi():
     print("Hi from ml.py")
