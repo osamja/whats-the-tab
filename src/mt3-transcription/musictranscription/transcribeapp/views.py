@@ -36,9 +36,12 @@ def transcribe(request):
   if request.method == 'POST':
     audio_id = request.POST['audio_id']
     midi = convert_audio_to_midi(audio_id)
-    return JsonResponse({'message': midi})
-  return JsonResponse({'message': 'Transcribe view'})
 
+    # import pdb; pdb.set_trace()
+
+    return JsonResponse({'created midi': 'thweet'})
+
+  return JsonResponse({'message': 'Transcribe view'})
 
 
 

@@ -138,4 +138,8 @@ dmypy.json
 
 # ignore the mt3 directory
 mt3/
-musictranscription/audios/
+# ignore the musictranscription/audios/ directory
+src/mt3-transcription/musictranscription/audios/
+src/mt3-transcription/musictranscription/transcribeapp/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
+
+
