@@ -4,6 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 import uuid
 from .tasks import convert_audio_to_midi, get_audio_filename, getAudioDirectory
+from .models import AudioMIDI
 import pdb
 import os
 
@@ -12,23 +13,38 @@ def upload_audio(request):
   if request.method == 'POST' and request.FILES['audio']:
     audio_file = request.FILES['audio']
     audio_filename = get_audio_filename()
-    audio_path = getAudioDirectory() + audio_filename
 
-    FileSystemStorage().save(audio_path, audio_file)
+    audio_midi = AudioMIDI.objects.create(
+      audio_file=audio_file,
+      audio_filename=audio_filename
+    )
+    
+    id = audio_midi.id
 
     # audio_midi = AudioMIDI.objects.create(audio_file=audio_file)
     # convert_audio_to_midi.delay(audio_midi.id)  # Asynchronously process the audio
     return JsonResponse({
       'message': 'File uploaded successfully!',
-      'audio_filename': audio_filename
+      'audio_filename': audio_filename,
+      'id': id,
     })
+  
   return JsonResponse({'error': 'Failed to upload file'}, status=400)
 
 @csrf_exempt  # @todo remove for prod
 def transcribe(request):
   if request.method == 'POST':
-    audio_filename = request.POST['audio_filename']
-    midi = convert_audio_to_midi(audio_filename)
-    return JsonResponse({'message': audio_filename})
+    audio_id = request.POST['audio_id']
+    midi = convert_audio_to_midi(audio_id)
+    return JsonResponse({'message': midi})
   return JsonResponse({'message': 'Transcribe view'})
-  # return render(request, 'transcribe.html')
+
+
+
+
+
+
+
+
+
+
