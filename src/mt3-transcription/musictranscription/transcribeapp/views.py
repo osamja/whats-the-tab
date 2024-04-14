@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, FileResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 import uuid
@@ -65,5 +65,13 @@ def transcribe(request):
 
   return JsonResponse({'message': 'Transcribe view'})
 
-
+@csrf_exempt  # @todo remove for prod
+def download_midi(request, audio_id):
+    try:
+        audio_midi = AudioMIDI.objects.get(pk=audio_id)
+        # Assuming midi_file is the field name in your model where the file path is stored
+        response = FileResponse(audio_midi.midi_file.open(), as_attachment=True, filename=audio_midi.midi_file.name)
+        return response
+    except AudioMIDI.DoesNotExist:
+        raise Http404("No MIDI file found for the provided ID.")
 
