@@ -147,3 +147,4 @@ src/mt3-transcription/musictranscription/acoustic_guitar_only.midi
 src/mt3-transcription/musictranscription/content/
 src/mt3-transcription/musictranscription/midis/
 src/mt3-transcription/content/*
+src/mt3-transcription/checkpoints/*
