@@ -413,18 +413,10 @@ def delete_midi_and_mp3s():
 def generate_midi_from_audio(audio_id, audio):
   inference_model = InferenceModel(checkpoint_path, MODEL)
 
-  # TODO @sammy: use a fixed local path from host to avoid constant copy/paste
-  audio_file_paths = {
-      'short': 'why-georgia-30.mp3',
-      'long': '3_Why_Georgia.mp3'
-  }
-
-  # audio_file_path = audio_file_paths['short']
-
   # mp3 is split into N segments of audio chunk length.
   # To transcribe entire mp3, num_transcription_segments = len(audio) / audio_chunk_length
   # To transcribe the first 2 seconds of an mp3, set NUM_TRANSCRIPTION_SEGMENTS to 1 assuming length is 2 seconds
-  NUM_TRANSCRIPTION_SEGMENTS = 100
+  NUM_TRANSCRIPTION_SEGMENTS = 1
   AUDIO_CHUNK_LENGTH = 2000
   split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
 
@@ -445,7 +437,7 @@ def generate_midi_from_audio(audio_id, audio):
 
   print(f"Acoustic guitar events copied to '{output_file}'")
 
-  return acoustic_guitar_midi
+  return acoustic_guitar_midi, output_file
 
 
 def sayHi():

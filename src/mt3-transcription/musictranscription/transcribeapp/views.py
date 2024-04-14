@@ -3,10 +3,13 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 import uuid
-from .tasks import convert_audio_to_midi, get_audio_filename, getAudioDirectory
+from .tasks import get_audio_filename, getAudioDirectory
 from .models import AudioMIDI
+from .ml import sayHi, generate_midi_from_audio
 import pdb
 import os
+import io
+from django.core.files import File
 
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
@@ -22,7 +25,6 @@ def upload_audio(request):
     id = audio_midi.id
 
     # audio_midi = AudioMIDI.objects.create(audio_file=audio_file)
-    # convert_audio_to_midi.delay(audio_midi.id)  # Asynchronously process the audio
     return JsonResponse({
       'message': 'File uploaded successfully!',
       'audio_filename': audio_filename,
@@ -35,19 +37,33 @@ def upload_audio(request):
 def transcribe(request):
   if request.method == 'POST':
     audio_id = request.POST['audio_id']
-    midi = convert_audio_to_midi(audio_id)
+    audio_midi = AudioMIDI.objects.get(id=audio_id)
+    # load the audio file
+    audio_file = audio_midi.audio_file
+    midi_file, midi_filename = generate_midi_from_audio(audio_midi.id, audio_file)
 
-    # import pdb; pdb.set_trace()
+    # Assuming `output_midi` is your MidiFile object
+    # Save the MidiFile data to a BytesIO object
+    midi_buffer = io.BytesIO()
+    midi_file.save(file=midi_buffer)
 
-    return JsonResponse({'created midi': 'thweet'})
+    # It's important to seek back to the beginning of the BytesIO object after writing to it
+    midi_buffer.seek(0)
+
+    # Create a Django File object wrapping the BytesIO buffer
+    wrapped_file = File(midi_buffer, name=midi_filename)
+    audio_midi.midi_file = wrapped_file
+    
+    audio_midi.save()
+
+    return JsonResponse({
+      'message':'created midi successfully',
+      'audio id ': audio_id,
+      'audio filename': audio_midi.audio_filename,
+      'midi filename': audio_midi.midi_file.name
+    })
 
   return JsonResponse({'message': 'Transcribe view'})
-
-
-
-
-
-
 
 
 

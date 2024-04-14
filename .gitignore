@@ -142,4 +142,8 @@ mt3/
 src/mt3-transcription/musictranscription/audios/
 src/mt3-transcription/musictranscription/transcribeapp/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
 
-
+src/mt3-transcription/musictranscription/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
+src/mt3-transcription/musictranscription/acoustic_guitar_only.midi
+src/mt3-transcription/musictranscription/content/
+src/mt3-transcription/musictranscription/midis/
+src/mt3-transcription/content/*
