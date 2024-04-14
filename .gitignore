@@ -140,11 +140,14 @@ dmypy.json
 mt3/
 # ignore the musictranscription/audios/ directory
 src/mt3-transcription/musictranscription/audios/
-src/mt3-transcription/musictranscription/transcribeapp/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
 
+src/mt3-transcription/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
 src/mt3-transcription/musictranscription/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
 src/mt3-transcription/musictranscription/acoustic_guitar_only.midi
 src/mt3-transcription/musictranscription/content/
 src/mt3-transcription/musictranscription/midis/
 src/mt3-transcription/content/*
 src/mt3-transcription/checkpoints/*
+src/mt3-transcription/cuda-repo-wsl-ubuntu-12-4-local_12.4.1-1_amd64.deb
+
+src/mt3-transcription/3_Why_Georgia.mp3
