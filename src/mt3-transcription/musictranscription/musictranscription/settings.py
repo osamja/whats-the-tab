@@ -28,6 +28,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
   '172.18.250.65',
   '127.0.0.1',
+  '100.85.133.118',
+  'pyaar.ai'
 ]
 
 CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000']

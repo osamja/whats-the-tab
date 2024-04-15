@@ -37,10 +37,11 @@ def upload_audio(request):
 def transcribe(request):
   if request.method == 'POST':
     audio_id = request.POST['audio_id']
+    num_transcription_segments = request.POST['num_transcription_segments']
     audio_midi = AudioMIDI.objects.get(id=audio_id)
     # load the audio file
     audio_file = audio_midi.audio_file
-    midi_file, midi_filename = generate_midi_from_audio(audio_midi.id, audio_file)
+    midi_file, midi_filename = generate_midi_from_audio(audio_midi.id, audio_file, num_transcription_segments)
 
     # Assuming `output_midi` is your MidiFile object
     # Save the MidiFile data to a BytesIO object

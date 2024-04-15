@@ -410,19 +410,19 @@ def delete_midi_and_mp3s():
     elif file.endswith('.midi'):
       os.remove(os.path.join('/content', file))
 
-def generate_midi_from_audio(audio_id, audio):
+def generate_midi_from_audio(audio_id, audio, num_transcription_segments=100):
   inference_model = InferenceModel(checkpoint_path, MODEL)
 
   # mp3 is split into N segments of audio chunk length.
   # To transcribe entire mp3, num_transcription_segments = len(audio) / audio_chunk_length
   # To transcribe the first 2 seconds of an mp3, set NUM_TRANSCRIPTION_SEGMENTS to 1 assuming length is 2 seconds
-  NUM_TRANSCRIPTION_SEGMENTS = 1
+  NUM_TRANSCRIPTION_SEGMENTS = int(num_transcription_segments)
   AUDIO_CHUNK_LENGTH = 2000
   split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
 
   # audio = upload_audio(sample_rate=SAMPLE_RATE)
   # log_event('uploadAudioComplete', {'value': round(len(audio) / SAMPLE_RATE)})
-
+ 
   # note_seq.notebook_utils.colab_play(audio, sample_rate=SAMPLE_RATE)
 
   midi_files = transcribe_and_download(split_audio, split_audio_filenames, inference_model)
