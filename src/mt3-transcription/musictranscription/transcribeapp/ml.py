@@ -410,7 +410,7 @@ def delete_midi_and_mp3s():
     elif file.endswith('.midi'):
       os.remove(os.path.join('/content', file))
 
-def generate_midi_from_audio(audio_id, audio, num_transcription_segments=100):
+def generate_midi_from_audio(audio_id, audio, num_transcription_segments):
   inference_model = InferenceModel(checkpoint_path, MODEL)
 
   # mp3 is split into N segments of audio chunk length.
