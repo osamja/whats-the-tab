@@ -40,9 +40,15 @@ def transcribe(request):
       audio_id = request.POST['audio_id']
       num_transcription_segments = request.POST.get('num_transcription_segments', 1)
       audio_midi = AudioMIDI.objects.get(id=audio_id)
+
+      # set number of transcription segments
+      audio_midi.num_transcription_segments = num_transcription_segments
+      audio_midi.status = 'processing'
+      audio_midi.save()
+
       # load the audio file
       audio_file = audio_midi.audio_file
-      midi_file, midi_filename = generate_midi_from_audio(audio_midi.id, audio_file, num_transcription_segments)
+      midi_file, midi_filename = generate_midi_from_audio(audio_midi, num_transcription_segments)
 
       # Assuming `output_midi` is your MidiFile object
       # Save the MidiFile data to a BytesIO object
@@ -58,6 +64,9 @@ def transcribe(request):
       
       audio_midi.save()
 
+      audio_midi.status = 'completed'
+      audio_midi.save()
+
       return JsonResponse({
         'message':'created midi successfully',
         'audio id ': audio_id,
@@ -67,8 +76,12 @@ def transcribe(request):
   except KeyError as e:
         # Handle the case where 'audio_id' is not provided
         error_message = f"Missing key in request data: {str(e)}"
+        audio_midi.status = 'failed: ' + str(e)
+        audio_midi.save()
         return JsonResponse({'error': error_message}, status=400) 
   except Exception as e:
+        audio_midi.status = 'failed: ' + str(e)
+        audio_midi.save()
         # General exception handler for any other unanticipated exceptions
         return JsonResponse({'error': 'Internal server error'}, status=500)
 
@@ -96,7 +109,9 @@ def audio_status(request, audio_id):
             'midi_filename': audio_midi.midi_file.name if audio_midi.midi_file else None,
             'created_at': audio_midi.created_at,
             'updated_at': audio_midi.updated_at,
-            'status': 'completed' if audio_midi.midi_file else 'processing'
+            'status': audio_midi.status,
+            'current_segment': audio_midi.current_segment,
+            'num_transcription_segments': audio_midi.num_transcription_segments,
         }
         return JsonResponse(response_data, status=200)
 
