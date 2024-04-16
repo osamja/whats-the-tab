@@ -296,15 +296,19 @@ def download_midi(est_ns, download_path='transcription.midi'):
   note_seq.sequence_proto_to_midi_file(est_ns, download_path)
   # files.download('/tmp/transcribed.mid')
 
-def transcribe_and_download(split_audio, split_audio_filenames, inference_model):
+def transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model):
   download_filenames = []
 
-  for (audio_chunk, audio_filename) in zip(split_audio, split_audio_filenames):
+  for i, (audio_chunk, audio_filename) in enumerate(zip(split_audio, split_audio_filenames)):
     audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
     est_ns = transcribe_audio(audio, inference_model)
     download_filename = audio_filename.rsplit('.', 1)[0] + '.midi'
     download_midi(est_ns, download_filename)
     download_filenames.append(download_filename)
+
+    # Update current segment
+    audio_midi.current_segment = i + 1
+    audio_midi.save()  # Save the progress after each segment is transcribed
 
   return download_filenames
 
@@ -410,7 +414,10 @@ def delete_midi_and_mp3s():
     elif file.endswith('.midi'):
       os.remove(os.path.join('/content', file))
 
-def generate_midi_from_audio(audio_id, audio, num_transcription_segments):
+def generate_midi_from_audio(audio_midi, num_transcription_segments):
+  audio_id = audio_midi.id
+  audio = audio_midi.audio_file
+
   inference_model = InferenceModel(checkpoint_path, MODEL)
 
   # mp3 is split into N segments of audio chunk length.
@@ -425,7 +432,7 @@ def generate_midi_from_audio(audio_id, audio, num_transcription_segments):
  
   # note_seq.notebook_utils.colab_play(audio, sample_rate=SAMPLE_RATE)
 
-  midi_files = transcribe_and_download(split_audio, split_audio_filenames, inference_model)
+  midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)
 
   # Replace with the path to your MIDI file
   midi_file_path = midi_files[0]
