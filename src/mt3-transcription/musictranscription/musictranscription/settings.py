@@ -46,7 +46,29 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'transcribeapp',
     'django_cleanup.apps.CleanupConfig',
+    'django_dramatiq',
 ]
+
+import dramatiq
+from dramatiq.brokers.redis import RedisBroker
+
+# Set up Redis broker for Dramatiq
+DRAMATIQ_BROKER = RedisBroker(host="localhost", port=6379)
+dramatiq.set_broker(DRAMATIQ_BROKER)
+
+DRAMATIQ_BROKER = {
+    "BROKER": "dramatiq.brokers.redis.RedisBroker",
+    "OPTIONS": {
+        "url": "redis://localhost:6379",
+    },
+    "MIDDLEWARE": [
+        "dramatiq.middleware.AgeLimit",
+        "dramatiq.middleware.TimeLimit",
+        "dramatiq.middleware.Callbacks",
+        "dramatiq.middleware.Retries",
+        "django_dramatiq.middleware.DbConnectionsMiddleware",
+    ]
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

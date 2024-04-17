@@ -18,3 +18,31 @@ Design Decisions
 
 		install dramatiq and redis message broker
 
+# Bring transcribe server online
+* Start django server
+```
+cd ~/whats-the-tab/src/mt3-transcription/musictranscription
+source ../venv/bin/activate
+python manage.py runserver 0:8000
+```
+
+* Start tailscale on desktop
+`sudo tailscaled`
+
+* Start redis server
+`redis-server`
+
+* Start dramatiq
+```
+cd ~/whats-the-tab/src/mt3-transcription/musictranscription
+source ../venv/bin/activate
+python run_dramatiq.py transcribeapp.tasks
+```
+
+# Troubleshooting
+* Shell into django server 
+```
+cd ~/whats-the-tab/src/mt3-transcription/musictranscription
+source ../venv/bin/activate
+python manage.py shell
+```
