@@ -33,14 +33,13 @@ import matplotlib.pyplot as plt
 from mido import MidiFile, MidiTrack
 from pydub import AudioSegment
 
+from .models import AudioMIDI
+import dramatiq
+import io
+from django.core.files import File
+
 SAMPLE_RATE = 16000
 SF2_PATH = 'SGM-v2.01-Sal-Guit-Bass-V1.3.sf2'
-MODEL = "mt3" #@param["ismir2021", "mt3"]
-mt3_path = 'checkpoints'
-
-checkpoint_path = f'{mt3_path}/{MODEL}/'
-
-print(checkpoint_path)
 
 class InferenceModel(object):
   """Wrapper of T5X model for music transcription."""
@@ -283,12 +282,15 @@ def split_mp3(audio, chunk_length_ms=2000, num_chunks=5):
 
     return chunks, split_filenames
 
-def transcribe_audio(audio, inference_model):
+def transcribe_audio(audio, inference_model, play=False):
   est_ns = inference_model(audio)
 
+  if play:
+    note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
+                           sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
 
-  note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
-                        sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
+  # note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
+                        # sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
   # note_seq.plot_sequence(est_ns)
   return est_ns
 
@@ -413,39 +415,6 @@ def delete_midi_and_mp3s():
       os.remove(os.path.join('/content', file))
     elif file.endswith('.midi'):
       os.remove(os.path.join('/content', file))
-
-def generate_midi_from_audio(audio_midi, num_transcription_segments):
-  audio_id = audio_midi.id
-  audio = audio_midi.audio_file
-
-  inference_model = InferenceModel(checkpoint_path, MODEL)
-
-  # mp3 is split into N segments of audio chunk length.
-  # To transcribe entire mp3, num_transcription_segments = len(audio) / audio_chunk_length
-  # To transcribe the first 2 seconds of an mp3, set NUM_TRANSCRIPTION_SEGMENTS to 1 assuming length is 2 seconds
-  NUM_TRANSCRIPTION_SEGMENTS = int(num_transcription_segments)
-  AUDIO_CHUNK_LENGTH = 2000
-  split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
-
-  # audio = upload_audio(sample_rate=SAMPLE_RATE)
-  # log_event('uploadAudioComplete', {'value': round(len(audio) / SAMPLE_RATE)})
- 
-  # note_seq.notebook_utils.colab_play(audio, sample_rate=SAMPLE_RATE)
-
-  midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)
-
-  # Replace with the path to your MIDI file
-  midi_file_path = midi_files[0]
-  plot_note_on_times(midi_file_path)
-
-  # Copy acoustic guitar events to a new MIDI file
-  output_file = 'acoustic_guitar_only.midi'
-  acoustic_guitar_midi = copy_acoustic_guitar_events(midi_files, output_file)
-
-  print(f"Acoustic guitar events copied to '{output_file}'")
-
-  return acoustic_guitar_midi, output_file
-
 
 def sayHi():
     print("Hi from ml.py")

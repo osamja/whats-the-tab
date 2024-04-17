@@ -1,19 +1,12 @@
 TODO
-	make the apis
+	[frontend] play midi
 
-		add a status field to model
+	[frontend] show transcribe progress
 
-		add a status api
-
-		install dramatiq and redis message broker
-
-
-
-
-	
+	[frontend] allow user to pick youtube video and assert copyright
 
 IN PROGRESS
-	
+	[backend] support multi instrument transcription
 
 DONE
 	test the midi is being saved to AudioMIDI object
@@ -28,4 +21,10 @@ DONE
 
 	expose api publicly
 
+	upload zubys frontend to pyaar.ai
 
+	add and expose fields for current and total generate
+
+	make api async
+
+	test progress as of 2pm 4/16/24

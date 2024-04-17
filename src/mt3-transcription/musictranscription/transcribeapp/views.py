@@ -3,17 +3,18 @@ from django.http import JsonResponse, FileResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 import uuid
-from .tasks import get_audio_filename, getAudioDirectory
+from .tasks import get_audio_filename, getAudioDirectory, generate_midi_from_audio
 from .models import AudioMIDI
-from .ml import sayHi, generate_midi_from_audio
 import pdb
 import os
 import io
 from django.core.files import File
 
+import dramatiq
+
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
-  if request.method == 'POST' and request.FILES['audio']:
+  if request.method == 'POST' and request.FILES.get('audio', False):
     audio_file = request.FILES['audio']
     audio_filename = get_audio_filename()
 
@@ -36,42 +37,25 @@ def upload_audio(request):
 @csrf_exempt  # @todo remove for prod
 def transcribe(request):
   try:   
+
     if request.method == 'POST':
-      audio_id = request.POST['audio_id']
-      num_transcription_segments = request.POST.get('num_transcription_segments', 1)
-      audio_midi = AudioMIDI.objects.get(id=audio_id)
+      audio_midi_id = request.POST['audio_id']
+
+      
+      num_transcription_segments = request.POST.get('num_transcription_segments', 10)
+      audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
       # set number of transcription segments
       audio_midi.num_transcription_segments = num_transcription_segments
       audio_midi.status = 'processing'
       audio_midi.save()
 
-      # load the audio file
-      audio_file = audio_midi.audio_file
-      midi_file, midi_filename = generate_midi_from_audio(audio_midi, num_transcription_segments)
-
-      # Assuming `output_midi` is your MidiFile object
-      # Save the MidiFile data to a BytesIO object
-      midi_buffer = io.BytesIO()
-      midi_file.save(file=midi_buffer)
-
-      # It's important to seek back to the beginning of the BytesIO object after writing to it
-      midi_buffer.seek(0)
-
-      # Create a Django File object wrapping the BytesIO buffer
-      wrapped_file = File(midi_buffer, name=midi_filename)
-      audio_midi.midi_file = wrapped_file
-      
-      audio_midi.save()
-
-      audio_midi.status = 'completed'
-      audio_midi.save()
+      # import pdb; pdb.set_trace()
+      generate_midi_from_audio.send(audio_midi_id)
 
       return JsonResponse({
-        'message':'created midi successfully',
-        'audio id ': audio_id,
-        'audio filename': audio_midi.audio_filename,
-        'midi filename': audio_midi.midi_file.name
+        'message':'Created MIDI generation task. Check status endpoint for updates.',
+        'audio_midi_id ': audio_midi_id,
       })
   except KeyError as e:
         # Handle the case where 'audio_id' is not provided
