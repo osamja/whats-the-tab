@@ -1,12 +1,13 @@
 TODO
-	[frontend] play midi
-
-	[frontend] show transcribe progress
-
+	
+	[frontend] build landing page with email subscription for updates
+	
 	[frontend] allow user to pick youtube video and assert copyright
 
 IN PROGRESS
+	
 	[backend] support multi instrument transcription
+
 
 DONE
 	test the midi is being saved to AudioMIDI object
@@ -28,3 +29,11 @@ DONE
 	make api async
 
 	test progress as of 2pm 4/16/24
+
+	allow cors api calls from localhost for frontend dev 
+
+	setup mt3 notebook environment on 4090
+	
+	[frontend] play midi
+
+	[frontend] show transcribe progress
