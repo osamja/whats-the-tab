@@ -43,13 +43,14 @@ def transcribe(request):
       
       num_transcription_segments = request.POST.get('num_transcription_segments', 10)
       audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
+      is_midi2wav = request.POST.get('is_midi2wav', True)
 
-      # set number of transcription segments
+      # set audio midi object fields
       audio_midi.num_transcription_segments = num_transcription_segments
+      audio_midi.is_midi2wav = is_midi2wav
       audio_midi.status = 'processing'
       audio_midi.save()
 
-      # import pdb; pdb.set_trace()
       generate_midi_from_audio.send(audio_midi_id)
 
       return JsonResponse({
@@ -81,6 +82,19 @@ def download_midi(request, audio_id):
     except Exception as e:
         # General exception handler for any other unanticipated exceptions
         return JsonResponse({'error': 'Internal server error'}, status=500)
+    
+@csrf_exempt
+def download_midi_wav(request, audio_id):
+    try:
+        audio_midi = AudioMIDI.objects.get(pk=audio_id)
+        # Assuming midi_wav_file is the field name in your model where the file path is stored
+        response = FileResponse(audio_midi.midi_wav_file.open(), as_attachment=True, filename=audio_midi.midi_wav_file.name)
+        return response
+    except AudioMIDI.DoesNotExist:
+        raise Http404("No MIDI WAV file found for the provided ID.")
+    except Exception as e:
+        # General exception handler for any other unanticipated exceptions
+        return JsonResponse({'error': 'Internal server error'}, status=500)
 
 @csrf_exempt  # @todo remove for prod
 def audio_status(request, audio_id):
@@ -90,6 +104,7 @@ def audio_status(request, audio_id):
             'audio_id': audio_midi.id,
             'audio_filename': audio_midi.audio_filename,
             'midi_filename': audio_midi.midi_file.name if audio_midi.midi_file else None,
+            'midi_wav_filename': audio_midi.midi_wav_file.name if audio_midi.midi_wav_file else None,
             'created_at': audio_midi.created_at,
             'updated_at': audio_midi.updated_at,
             'status': audio_midi.status,

@@ -38,6 +38,8 @@ import dramatiq
 import io
 from django.core.files import File
 
+from midi2audio import FluidSynth
+
 SAMPLE_RATE = 16000
 SF2_PATH = 'SGM-v2.01-Sal-Guit-Bass-V1.3.sf2'
 
@@ -450,3 +452,29 @@ def delete_midi_and_mp3s():
 def sayHi():
     print("Hi from ml.py")
 
+def midi_files_to_wav(midi_files, output_file):
+  # Configuration
+  fs = FluidSynth()
+
+  # Convert each MIDI file to WAV
+  wav_files = []
+  for midi_file in midi_files:
+      output_wav = f"{os.path.splitext(midi_file)[0]}.wav"
+      print(f"Converting {midi_file} to {output_wav}")
+      fs.midi_to_audio(midi_file, output_wav)
+      wav_files.append(output_wav)
+
+  return wav_files
+
+def combine_wavs(wav_files, combined_output):
+      """Combine multiple WAV files into a single WAV file."""
+      combined = AudioSegment.empty()
+      for wav_file in wav_files:
+          audio = AudioSegment.from_wav(wav_file)
+          combined += audio
+      combined.export(combined_output, format='wav')
+      return combined_output
+
+
+
+   
