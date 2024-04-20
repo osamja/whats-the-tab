@@ -406,6 +406,37 @@ def copy_acoustic_guitar_events(midi_files, output_file):
     output_midi.save(output_file)
     return output_midi
 
+def stitch_midi_files(midi_files, output_file):
+    # Create a new MIDI file for the output
+    output_midi = MidiFile()
+    accumulated_time = 0  # Time shift to apply to each file's events
+    final_track = MidiTrack()  # Track to hold all events
+
+    # Process each MIDI file
+    for file_index, file_path in enumerate(midi_files):
+        midi_file = MidiFile(file_path)
+
+        # Merge all tracks into one for simplicity
+        merged_track = MidiTrack()
+        for track in midi_file.tracks:
+            for msg in track:
+                # Add time to each message to adjust for the accumulated time from previous files
+                merged_track.append(msg.copy(time=msg.time + accumulated_time))
+        
+        # Update accumulated_time for the next file, ensuring continuity
+        # Calculate total time in the current track
+        total_time = sum(msg.time for msg in merged_track if not msg.is_meta)
+        accumulated_time += total_time
+
+        # Append all events from merged_track to the final_track
+        final_track += merged_track
+
+    # Add the compiled track to the output MIDI file
+    output_midi.tracks.append(final_track)
+
+    # Save the output MIDI file
+    output_midi.save(output_file)
+    return output_midi
 
 def delete_midi_and_mp3s():
   # delete all the midi and mp3 files stored in /content such as /content/0.mp3, /content/0.midi, etc..

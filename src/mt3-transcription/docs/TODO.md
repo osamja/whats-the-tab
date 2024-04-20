@@ -5,8 +5,12 @@ TODO
 
 	[frontend] allow user to pick youtube video and assert copyright
 
+	[backend] disable cors in production
+
+	[frontend] if status is pending, do not spam status until processing (job server culd be down)
+
 IN PROGRESS
-	[backend] support multi instrument transcription
+	[backend] produce multi instrument transcription
 
 DONE
 	test the midi is being saved to AudioMIDI object
