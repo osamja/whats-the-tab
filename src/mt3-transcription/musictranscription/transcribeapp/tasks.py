@@ -2,11 +2,12 @@
 import datetime, uuid
 from transcribeapp.models import AudioMIDI
 import io
-from django.core.files import File, ContentFile
+from django.core.files import File
+from django.core.files.base import ContentFile
 import dramatiq
 import fluidsynth
 import mido
-
+from django.utils.timezone import now
 
 
 from .ml import split_mp3, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel, stitch_midi_files, midi_files_to_wav, combine_wavs
@@ -39,7 +40,7 @@ def generate_midi_from_audio(audio_midi_id):
   if is_midi2wav:
     wav_files = midi_files_to_wav(midi_files, 'output.wav')
     # Combine all WAV files into one
-    combined_output = combine_wavs(wav_files, 'combined_output.wav')
+    combined_output = combine_wavs(wav_files)
     unique_filename = f"combined_output_{now().strftime('%Y%m%d%H%M%S')}.wav"
     # Save combined WAV file using Django's FileField
     audio_midi.midi_wav_file.save(unique_filename, ContentFile(combined_output))

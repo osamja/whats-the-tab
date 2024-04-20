@@ -38,6 +38,7 @@ import dramatiq
 import io
 from django.core.files import File
 
+
 from midi2audio import FluidSynth
 
 SAMPLE_RATE = 16000
@@ -465,15 +466,16 @@ def midi_files_to_wav(midi_files, output_file):
       wav_files.append(output_wav)
 
   return wav_files
-
-def combine_wavs(wav_files, combined_output):
-      """Combine multiple WAV files into a single WAV file."""
-      combined = AudioSegment.empty()
-      for wav_file in wav_files:
-          audio = AudioSegment.from_wav(wav_file)
-          combined += audio
-      combined.export(combined_output, format='wav')
-      return combined_output
+def combine_wavs(wav_files):
+    """Combine multiple WAV files into a single WAV file and return the binary data."""
+    combined = AudioSegment.empty()
+    for wav_file in wav_files:
+        audio = AudioSegment.from_wav(wav_file)
+        combined += audio
+    # Export combined audio to byte stream
+    byte_stream = io.BytesIO()
+    combined.export(byte_stream, format='wav')
+    return byte_stream.getvalue()
 
 
 
