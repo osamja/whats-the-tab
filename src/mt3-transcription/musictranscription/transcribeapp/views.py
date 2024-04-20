@@ -40,7 +40,6 @@ def transcribe(request):
 
     if request.method == 'POST':
       audio_midi_id = request.POST['audio_id']
-
       
       num_transcription_segments = request.POST.get('num_transcription_segments', 10)
       audio_midi = AudioMIDI.objects.get(id=audio_midi_id)

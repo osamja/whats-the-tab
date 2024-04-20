@@ -5,7 +5,7 @@ import io
 from django.core.files import File
 import dramatiq
 
-from .ml import split_mp3, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel
+from .ml import split_mp3, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel, stitch_midi_files
 
 MODEL = "mt3" #@param["ismir2021", "mt3"]
 mt3_path = 'checkpoints'
@@ -38,10 +38,14 @@ def generate_midi_from_audio(audio_midi_id):
   # Copy acoustic guitar events to a new MIDI file
   output_file = 'acoustic_guitar_only.midi'
   acoustic_guitar_midi = copy_acoustic_guitar_events(midi_files, output_file)
+  midi_file, midi_filename = acoustic_guitar_midi, output_file
+
+  # output_file = 'stitched.midi'
+  # output_midi = stitch_midi_files(midi_files, output_file)
+  # midi_file, midi_filename = output_midi, output_file
 
   print(f"Acoustic guitar events copied to '{output_file}'")
 
-  midi_file, midi_filename = acoustic_guitar_midi, output_file
   # Assuming `output_midi` is your MidiFile object
   # Save the MidiFile data to a BytesIO object
   midi_buffer = io.BytesIO()
