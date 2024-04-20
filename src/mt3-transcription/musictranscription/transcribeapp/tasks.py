@@ -2,10 +2,14 @@
 import datetime, uuid
 from transcribeapp.models import AudioMIDI
 import io
-from django.core.files import File
+from django.core.files import File, ContentFile
 import dramatiq
+import fluidsynth
+import mido
 
-from .ml import split_mp3, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel, stitch_midi_files
+
+
+from .ml import split_mp3, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel, stitch_midi_files, midi_files_to_wav, combine_wavs
 
 MODEL = "mt3" #@param["ismir2021", "mt3"]
 mt3_path = 'checkpoints'
@@ -19,6 +23,7 @@ def generate_midi_from_audio(audio_midi_id):
   audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
   audio = audio_midi.audio_file
   num_transcription_segments = audio_midi.num_transcription_segments
+  is_midi2wav = audio_midi.is_midi2wav
 
   inference_model = InferenceModel(checkpoint_path, MODEL)
 
@@ -26,14 +31,21 @@ def generate_midi_from_audio(audio_midi_id):
   # To transcribe entire mp3, num_transcription_segments = len(audio) / audio_chunk_length
   # To transcribe the first 2 seconds of an mp3, set NUM_TRANSCRIPTION_SEGMENTS to 1 assuming length is 2 seconds
   NUM_TRANSCRIPTION_SEGMENTS = int(num_transcription_segments)
-  AUDIO_CHUNK_LENGTH = 2000
+  AUDIO_CHUNK_LENGTH = 5000
   split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
 
   midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)
 
-  # Replace with the path to your MIDI file
-  midi_file_path = midi_files[0]
-  plot_note_on_times(midi_file_path)
+  if is_midi2wav:
+    wav_files = midi_files_to_wav(midi_files, 'output.wav')
+    # Combine all WAV files into one
+    combined_output = combine_wavs(wav_files, 'combined_output.wav')
+    unique_filename = f"combined_output_{now().strftime('%Y%m%d%H%M%S')}.wav"
+    # Save combined WAV file using Django's FileField
+    audio_midi.midi_wav_file.save(unique_filename, ContentFile(combined_output))
+    # Save the combined WAV file to the audio_midi object
+    audio_midi.midi_wav_file = combined_output
+    print("Conversion and combination complete. Output saved as 'combined_output.wav'.")
 
   # Copy acoustic guitar events to a new MIDI file
   output_file = 'acoustic_guitar_only.midi'
