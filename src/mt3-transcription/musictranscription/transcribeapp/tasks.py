@@ -36,16 +36,15 @@ def generate_midi_from_audio(audio_midi_id):
   split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
 
   midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)
-
+  # midi_files = ['content/0.midi', 'content/1.midi', 'content/2.midi']
   if is_midi2wav:
+    # import pdb; pdb.set_trace()
     wav_files = midi_files_to_wav(midi_files, 'output.wav')
     # Combine all WAV files into one
     combined_output = combine_wavs(wav_files)
     unique_filename = f"combined_output_{now().strftime('%Y%m%d%H%M%S')}.wav"
     # Save combined WAV file using Django's FileField
     audio_midi.midi_wav_file.save(unique_filename, ContentFile(combined_output))
-    # Save the combined WAV file to the audio_midi object
-    audio_midi.midi_wav_file = combined_output
     print("Conversion and combination complete. Output saved as 'combined_output.wav'.")
 
   # Copy acoustic guitar events to a new MIDI file
