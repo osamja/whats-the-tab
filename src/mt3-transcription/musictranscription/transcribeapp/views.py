@@ -10,7 +10,10 @@ import os
 import io
 from django.core.files import File
 
+from pytube import YouTube
 import dramatiq
+from django.core.files.base import ContentFile
+import tempfile
 
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
@@ -33,6 +36,42 @@ def upload_audio(request):
     })
   
   return JsonResponse({'error': 'Failed to upload file'}, status=400)
+
+@csrf_exempt
+def upload_from_youtube(request):
+    if request.method == 'POST':
+        youtube_url = request.POST.get('youtube_url')
+        if not youtube_url:
+            return JsonResponse({'error': 'No YouTube URL provided'}, status=400)
+        
+        try:
+            import pdb; pdb.set_trace()
+            # Download the audio stream
+            file_data, temp_filename = download_youtube_audio(youtube_url)
+
+            audio_midi = AudioMIDI.objects.create(
+              audio_file=ContentFile(file_data),
+              audio_filename=temp_filename
+          )
+            
+            return JsonResponse({
+                'message': 'YouTube audio downloaded and saved to model',
+                'audio_id': audio_midi.id
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+    return JsonResponse({'error': 'Invalid request method'}, status=400)
+
+def download_youtube_audio(youtube_url):
+    yt = YouTube(youtube_url)
+    audio_stream = yt.streams.filter(only_audio=True).first()
+    
+    # Use a context manager to automatically delete the file after use
+    with tempfile.NamedTemporaryFile(delete=True, suffix='.mp4') as temp_file:
+        audio_stream.download(filename=temp_file.name)
+        temp_file.seek(0)  # Rewind the file to the beginning after writing
+        return temp_file.read(), temp_file.name  # Return file data and name for further use
 
 @csrf_exempt  # @todo remove for prod
 def transcribe(request):
