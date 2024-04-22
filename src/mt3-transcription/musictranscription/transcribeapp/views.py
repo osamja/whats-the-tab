@@ -3,17 +3,19 @@ from django.http import JsonResponse, FileResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 import uuid
-from .tasks import get_audio_filename, getAudioDirectory, generate_midi_from_audio
+from .tasks import get_audio_filename, getAudioDirectory, generate_midi_from_audio, download_youtube_audio_and_save
 from .models import AudioMIDI
 import pdb
 import os
 import io
 from django.core.files import File
+import base64
 
-from pytube import YouTube
+
 import dramatiq
 from django.core.files.base import ContentFile
-import tempfile
+
+import subprocess
 
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
@@ -32,7 +34,7 @@ def upload_audio(request):
     return JsonResponse({
       'message': 'File uploaded successfully!',
       'audio_filename': audio_filename,
-      'id': id,
+      'audio_midi_id': id,
     })
   
   return JsonResponse({'error': 'Failed to upload file'}, status=400)
@@ -43,42 +45,28 @@ def upload_from_youtube(request):
         youtube_url = request.POST.get('youtube_url')
         if not youtube_url:
             return JsonResponse({'error': 'No YouTube URL provided'}, status=400)
-        
         try:
-            import pdb; pdb.set_trace()
-            # Download the audio stream
-            file_data, temp_filename = download_youtube_audio(youtube_url)
-
             audio_midi = AudioMIDI.objects.create(
-              audio_file=ContentFile(file_data),
-              audio_filename=temp_filename
-          )
-            
+                youtube_url=youtube_url,
+                audio_filename=f"{uuid.uuid4().hex}.mp4",  # Temporary filename placeholder
+                status='initiated'
+            )
+            download_youtube_audio_and_save.send(audio_midi.id)
             return JsonResponse({
-                'message': 'YouTube audio downloaded and saved to model',
-                'audio_id': audio_midi.id
+                'message': 'YouTube audio download initiated.',
+                'audio_midi_id': audio_midi.id
             })
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
     return JsonResponse({'error': 'Invalid request method'}, status=400)
 
-def download_youtube_audio(youtube_url):
-    yt = YouTube(youtube_url)
-    audio_stream = yt.streams.filter(only_audio=True).first()
-    
-    # Use a context manager to automatically delete the file after use
-    with tempfile.NamedTemporaryFile(delete=True, suffix='.mp4') as temp_file:
-        audio_stream.download(filename=temp_file.name)
-        temp_file.seek(0)  # Rewind the file to the beginning after writing
-        return temp_file.read(), temp_file.name  # Return file data and name for further use
 
 @csrf_exempt  # @todo remove for prod
 def transcribe(request):
-  try:   
-
+  try:
     if request.method == 'POST':
-      audio_midi_id = request.POST['audio_id']
+      audio_midi_id = request.POST['audio_midi_id']
       
       num_transcription_segments = request.POST.get('num_transcription_segments', 10)
       audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
@@ -99,20 +87,20 @@ def transcribe(request):
   except KeyError as e:
         # Handle the case where 'audio_id' is not provided
         error_message = f"Missing key in request data: {str(e)}"
-        audio_midi.status = 'failed: ' + str(e)
-        audio_midi.save()
+        # audio_midi.status = 'failed: ' + str(e)
+        # audio_midi.save()
         return JsonResponse({'error': error_message}, status=400) 
   except Exception as e:
-        audio_midi.status = 'failed: ' + str(e)
-        audio_midi.save()
+        # audio_midi.status = 'failed: ' + str(e)
+        # audio_midi.save()
         # General exception handler for any other unanticipated exceptions
         return JsonResponse({'error': 'Internal server error'}, status=500)
 
 @csrf_exempt  # @todo remove for prod
-def download_midi(request, audio_id):
+def download_midi(request, audio_midi_id):
     # import pdb; pdb.set_trace()
     try:
-        audio_midi = AudioMIDI.objects.get(pk=audio_id)
+        audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
         # Assuming midi_file is the field name in your model where the file path is stored
         response = FileResponse(audio_midi.midi_file.open(), as_attachment=True, filename=audio_midi.midi_file.name)
         return response
@@ -123,9 +111,9 @@ def download_midi(request, audio_id):
         return JsonResponse({'error': 'Internal server error'}, status=500)
     
 @csrf_exempt
-def download_midi_wav(request, audio_id):
+def download_midi_wav(request, audio_midi_id):
     try:
-        audio_midi = AudioMIDI.objects.get(pk=audio_id)
+        audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
         # Assuming midi_wav_file is the field name in your model where the file path is stored
         response = FileResponse(audio_midi.midi_wav_file.open(), as_attachment=True, filename=audio_midi.midi_wav_file.name)
         return response
@@ -136,12 +124,13 @@ def download_midi_wav(request, audio_id):
         return JsonResponse({'error': 'Internal server error'}, status=500)
 
 @csrf_exempt  # @todo remove for prod
-def audio_status(request, audio_id):
+def audio_status(request, audio_midi_id):
     try:
-        audio_midi = AudioMIDI.objects.get(id=audio_id)
+        audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
         response_data = {
-            'audio_id': audio_midi.id,
+            'audio_midi_id': audio_midi.id,
             'audio_filename': audio_midi.audio_filename,
+            # 'audio_file': audio_midi.audio_file.name,
             'midi_filename': audio_midi.midi_file.name if audio_midi.midi_file else None,
             'midi_wav_filename': audio_midi.midi_wav_file.name if audio_midi.midi_wav_file else None,
             'created_at': audio_midi.created_at,
