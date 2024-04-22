@@ -8,9 +8,12 @@ import dramatiq
 import fluidsynth
 import mido
 from django.utils.timezone import now
+from pytube import YouTube
+import tempfile
+import os
 
 
-from .ml import split_mp3, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel, stitch_midi_files, midi_files_to_wav, combine_wavs
+from .ml import split_audio_segments, transcribe_and_download, copy_acoustic_guitar_events, plot_note_on_times, InferenceModel, stitch_midi_files, midi_files_to_wav, combine_wavs
 
 MODEL = "mt3" #@param["ismir2021", "mt3"]
 mt3_path = 'checkpoints'
@@ -19,7 +22,26 @@ checkpoint_path = f'{mt3_path}/{MODEL}/'
 
 print(checkpoint_path)
 
-@dramatiq.actor
+@dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
+def download_youtube_audio_and_save(audio_midi_id):
+    audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
+    yt = YouTube(audio_midi.youtube_url)
+    audio_stream = yt.streams.filter(only_audio=True).first()
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+        audio_stream.download(filename=tmp_file.name)
+        
+        # Move temporary file to BytesIO for further processing or storage
+        with open(tmp_file.name, 'rb') as file_data:
+            audio_midi.audio_file.save(audio_midi.audio_filename, ContentFile(file_data.read()))
+        
+        audio_midi.status = 'youtube_audio_downloaded'
+        audio_midi.save()
+
+    # Clean up the temporary file
+    os.remove(tmp_file.name)
+
+@dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
 def generate_midi_from_audio(audio_midi_id):
   audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
   audio = audio_midi.audio_file
@@ -33,12 +55,14 @@ def generate_midi_from_audio(audio_midi_id):
   # To transcribe the first 2 seconds of an mp3, set NUM_TRANSCRIPTION_SEGMENTS to 1 assuming length is 2 seconds
   NUM_TRANSCRIPTION_SEGMENTS = int(num_transcription_segments)
   AUDIO_CHUNK_LENGTH = 5000
-  split_audio, split_audio_filenames = split_mp3(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+  # check if audio is an mp3 or wav file
+
+  split_audio, split_audio_filenames = split_audio_segments(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+  
 
   midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)
   # midi_files = ['content/0.midi', 'content/1.midi', 'content/2.midi']
   if is_midi2wav:
-    # import pdb; pdb.set_trace()
     wav_files = midi_files_to_wav(midi_files, 'output.wav')
     # Combine all WAV files into one
     combined_output = combine_wavs(wav_files)
@@ -75,11 +99,14 @@ def generate_midi_from_audio(audio_midi_id):
   audio_midi.status = 'completed'
   audio_midi.save()
 
-def get_audio_filename():
-   fileHash = uuid.uuid4()
-   date = getDate()
-   audio_filename = date + '-' + fileHash.hex + '.wav'
-   return audio_filename
+def get_audio_filename(is_mp4=False):
+  fileHash = uuid.uuid4()
+  date = getDate()
+  if is_mp4:
+    audio_filename = date + '-' + fileHash.hex + '.mp4'
+  else:
+    audio_filename = date + '-' + fileHash.hex + '.wav'
+  return audio_filename
 
 def getAudioDirectory():
   return 'content/audio/'

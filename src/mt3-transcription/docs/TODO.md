@@ -1,15 +1,19 @@
 TODO
+	save 509 and 510 midi files
+	add upload progress bar
 	make sure ticks/beat in each midi is same
 	[frontend] allow user to pick youtube video and assert copyright
 
 	[frontend] if status is pending, do not spam status until processing (job server culd be down)
 	use audacity vocal remover
-
 		
 	add api params to extensively control generate
 	record dreaming w a broken heart and why georgia demo
+	react feature flags
+	implement max retries in dramatiq
 IN PROGRESS
-	link to mp3
+	write story of the demo
+	fill out YC application
 
 DONE
 	test the midi is being saved to AudioMIDI object
@@ -37,3 +41,5 @@ DONE
 	[frontend] show transcribe progress
 
 	[backend] produce multi instrument transcription (combine wav from each midi into one wav)
+
+	allow YT links to mp3
