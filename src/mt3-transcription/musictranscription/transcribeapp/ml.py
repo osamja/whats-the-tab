@@ -248,10 +248,16 @@ class InferenceModel(object):
       tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
     return tokens
 
-def split_mp3(audio, chunk_length_ms=2000, num_chunks=5):
+def split_audio_segments(audio, chunk_length_ms=2000, num_chunks=5):
     output_dir = 'content'
-    # Load the mp3 file
-    audio = AudioSegment.from_mp3(audio.path)
+
+    # if audio is mp3, load the mp3 file
+    if audio.name.endswith('.mp3'):
+      audio = AudioSegment.from_mp3(audio.path)
+    elif audio.name.endswith('.wav'):
+      audio = AudioSegment.from_wav(audio.path)
+    elif audio.name.endswith('.mp4'):
+      audio = AudioSegment.from_file(audio.path, format='mp4')
     split_filenames = []
 
     # Length of the audio in milliseconds
