@@ -31,9 +31,13 @@ ALLOWED_HOSTS = [
   '100.85.133.118',
   'pyaar.ai',
   'zubyj.com',
+  'localhost',
 ]
 
 CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000']
+
+CORS_ALLOW_ALL_ORIGINS = True
+
 
 # Application definition
 
@@ -47,6 +51,7 @@ INSTALLED_APPS = [
     'transcribeapp',
     'django_cleanup.apps.CleanupConfig',
     'django_dramatiq',
+    'corsheaders',
 ]
 
 import dramatiq
@@ -71,6 +76,7 @@ DRAMATIQ_BROKER = {
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
