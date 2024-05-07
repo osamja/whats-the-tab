@@ -1,13 +1,21 @@
 TODO
-	
-	[frontend] build landing page with email subscription for updates
-	
+	save 509 and 510 midi files
+	auto 8 bit nintendo midi
+	add upload progress bar
+	make sure ticks/beat in each midi is same
 	[frontend] allow user to pick youtube video and assert copyright
 
-IN PROGRESS
-	
-	[backend] support multi instrument transcription
+	[frontend] if status is pending, do not spam status until processing (job server culd be down)
+	use audacity vocal remover
+		
+	add api params to extensively control generate
+	record dreaming w a broken heart and why georgia demo
+	react feature flags
+	implement max retries in dramatiq
 
+IN PROGRESS
+	write story of the demo
+	fill out YC application
 
 DONE
 	test the midi is being saved to AudioMIDI object
@@ -30,10 +38,10 @@ DONE
 
 	test progress as of 2pm 4/16/24
 
-	allow cors api calls from localhost for frontend dev 
-
-	setup mt3 notebook environment on 4090
-	
 	[frontend] play midi
 
 	[frontend] show transcribe progress
+
+	[backend] produce multi instrument transcription (combine wav from each midi into one wav)
+
+	allow YT links to mp3

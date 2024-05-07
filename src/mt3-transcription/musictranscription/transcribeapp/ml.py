@@ -38,6 +38,9 @@ import dramatiq
 import io
 from django.core.files import File
 
+
+from midi2audio import FluidSynth
+
 SAMPLE_RATE = 16000
 SF2_PATH = 'SGM-v2.01-Sal-Guit-Bass-V1.3.sf2'
 
@@ -245,10 +248,16 @@ class InferenceModel(object):
       tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
     return tokens
 
-def split_mp3(audio, chunk_length_ms=2000, num_chunks=5):
+def split_audio_segments(audio, chunk_length_ms=2000, num_chunks=5):
     output_dir = 'content'
-    # Load the mp3 file
-    audio = AudioSegment.from_mp3(audio.path)
+
+    # if audio is mp3, load the mp3 file
+    if audio.name.endswith('.mp3'):
+      audio = AudioSegment.from_mp3(audio.path)
+    elif audio.name.endswith('.wav'):
+      audio = AudioSegment.from_wav(audio.path)
+    elif audio.name.endswith('.mp4'):
+      audio = AudioSegment.from_file(audio.path, format='mp4')
     split_filenames = []
 
     # Length of the audio in milliseconds
@@ -406,6 +415,37 @@ def copy_acoustic_guitar_events(midi_files, output_file):
     output_midi.save(output_file)
     return output_midi
 
+def stitch_midi_files(midi_files, output_file):
+    # Create a new MIDI file for the output
+    output_midi = MidiFile()
+    accumulated_time = 0  # Time shift to apply to each file's events
+    final_track = MidiTrack()  # Track to hold all events
+
+    # Process each MIDI file
+    for file_index, file_path in enumerate(midi_files):
+        midi_file = MidiFile(file_path)
+
+        # Merge all tracks into one for simplicity
+        merged_track = MidiTrack()
+        for track in midi_file.tracks:
+            for msg in track:
+                # Add time to each message to adjust for the accumulated time from previous files
+                merged_track.append(msg.copy(time=msg.time + accumulated_time))
+        
+        # Update accumulated_time for the next file, ensuring continuity
+        # Calculate total time in the current track
+        total_time = sum(msg.time for msg in merged_track if not msg.is_meta)
+        accumulated_time += total_time
+
+        # Append all events from merged_track to the final_track
+        final_track += merged_track
+
+    # Add the compiled track to the output MIDI file
+    output_midi.tracks.append(final_track)
+
+    # Save the output MIDI file
+    output_midi.save(output_file)
+    return output_midi
 
 def delete_midi_and_mp3s():
   # delete all the midi and mp3 files stored in /content such as /content/0.mp3, /content/0.midi, etc..
@@ -419,3 +459,30 @@ def delete_midi_and_mp3s():
 def sayHi():
     print("Hi from ml.py")
 
+def midi_files_to_wav(midi_files, output_file):
+  # Configuration
+  fs = FluidSynth()
+
+  # Convert each MIDI file to WAV
+  wav_files = []
+  for midi_file in midi_files:
+      output_wav = f"{os.path.splitext(midi_file)[0]}.wav"
+      print(f"Converting {midi_file} to {output_wav}")
+      fs.midi_to_audio(midi_file, output_wav)
+      wav_files.append(output_wav)
+
+  return wav_files
+def combine_wavs(wav_files):
+    """Combine multiple WAV files into a single WAV file and return the binary data."""
+    combined = AudioSegment.empty()
+    for wav_file in wav_files:
+        audio = AudioSegment.from_wav(wav_file)
+        combined += audio
+    # Export combined audio to byte stream
+    byte_stream = io.BytesIO()
+    combined.export(byte_stream, format='wav')
+    return byte_stream.getvalue()
+
+
+
+   
