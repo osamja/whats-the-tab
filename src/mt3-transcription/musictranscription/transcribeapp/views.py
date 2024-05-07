@@ -17,6 +17,8 @@ from django.core.files.base import ContentFile
 
 import subprocess
 
+IS_ASYNC = False
+
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
   if request.method == 'POST' and request.FILES.get('audio', False):
@@ -51,7 +53,12 @@ def upload_from_youtube(request):
                 audio_filename=f"{uuid.uuid4().hex}.mp4",  # Temporary filename placeholder
                 status='initiated'
             )
-            download_youtube_audio_and_save.send(audio_midi.id)
+
+            if IS_ASYNC:
+                download_youtube_audio_and_save.send(audio_midi.id)
+            else:
+                download_youtube_audio_and_save(audio_midi.id)
+
             return JsonResponse({
                 'message': 'YouTube audio download initiated.',
                 'audio_midi_id': audio_midi.id
@@ -78,7 +85,10 @@ def transcribe(request):
       audio_midi.status = 'processing'
       audio_midi.save()
 
-      generate_midi_from_audio.send(audio_midi_id)
+      if IS_ASYNC:
+        generate_midi_from_audio.send(audio_midi_id)
+      else:
+        generate_midi_from_audio(audio_midi_id)
 
       return JsonResponse({
         'message':'Created MIDI generation task. Check status endpoint for updates.',
