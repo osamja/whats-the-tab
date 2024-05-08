@@ -44,7 +44,6 @@ def download_youtube_audio_and_save(audio_midi_id):
 @dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
 def generate_midi_from_audio(audio_midi_id):
   audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
-  audio = audio_midi.audio_file
   num_transcription_segments = audio_midi.num_transcription_segments
   is_midi2wav = audio_midi.is_midi2wav
 
@@ -57,7 +56,7 @@ def generate_midi_from_audio(audio_midi_id):
   AUDIO_CHUNK_LENGTH = 5000
   # check if audio is an mp3 or wav file
 
-  split_audio, split_audio_filenames = split_audio_segments(audio, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+  split_audio, split_audio_filenames = split_audio_segments(audio_midi, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
   
 
   midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)

@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 from mido import MidiFile, MidiTrack
 from pydub import AudioSegment
 
-from .models import AudioMIDI
+from .models import AudioMIDI, AudioChunk
 import dramatiq
 import io
 from django.core.files import File
@@ -248,8 +248,8 @@ class InferenceModel(object):
       tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
     return tokens
 
-def split_audio_segments(audio, chunk_length_ms=2000, num_chunks=5):
-    output_dir = 'content'
+def split_audio_segments(audio_midi, chunk_length_ms=2000, num_chunks=5):
+    audio = audio_midi.audio_file
 
     # if audio is mp3, load the mp3 file
     if audio.name.endswith('.mp3'):
@@ -275,10 +275,22 @@ def split_audio_segments(audio, chunk_length_ms=2000, num_chunks=5):
     while start_ms < length_ms and len(chunks) < num_chunks:
         # Extract the chunk
         chunk = audio[start_ms:end_ms]
-
         # Save the chunk as a separate file
-        chunk_name = f"{output_dir}/{file_counter}.mp3"
-        chunk.export(chunk_name, format="mp3")
+        chunk_name = f"{audio_midi.id}-{file_counter}.wav"
+        chunk.export(chunk_name, format="wav")
+
+        # Create a file-like object from the chunk data
+        with open(chunk_name, 'rb') as chunk_file:
+            chunk_file_obj = File(chunk_file)
+
+            # Create AudioChunk object
+            audio_chunk = AudioChunk.objects.create(
+                audio_midi=audio_midi,
+                chunk_file=chunk_file_obj,
+                segment_index=file_counter
+            )
+
+        split_filenames.append(chunk_name)
         split_filenames.append(chunk_name)
 
         # Append the chunk to the list
