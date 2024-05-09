@@ -151,3 +151,12 @@ src/mt3-transcription/checkpoints/*
 src/mt3-transcription/cuda-repo-wsl-ubuntu-12-4-local_12.4.1-1_amd64.deb
 
 src/mt3-transcription/3_Why_Georgia.mp3
+dataset/
+
+env_vars.sh
+src/mt3-transcription/acoustic_guitar_only.midi
+src/mt3-transcription/musictranscription/audio_chunks/
+src/mt3-transcription/musictranscription/checkpoints/
+src/mt3-transcription/musictranscription/midi_2_wav/
+src/mt3-transcription/myenv
+src/mt3-transcription/output.wav
