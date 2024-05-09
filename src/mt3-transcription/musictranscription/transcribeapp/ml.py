@@ -290,8 +290,7 @@ def split_audio_segments(audio_midi, chunk_length_ms=2000, num_chunks=5):
                 segment_index=file_counter
             )
 
-        split_filenames.append(chunk_name)
-        split_filenames.append(chunk_name)
+        split_filenames.append(chunk_file_obj.name)
 
         # Append the chunk to the list
         chunks.append(chunk)
@@ -319,10 +318,10 @@ def download_midi(est_ns, download_path='transcription.midi'):
   note_seq.sequence_proto_to_midi_file(est_ns, download_path)
   # files.download('/tmp/transcribed.mid')
 
-def transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model):
+def transcribe_and_download(audio_midi, split_audio, split_filenames, inference_model):
   download_filenames = []
 
-  for i, (audio_chunk, audio_filename) in enumerate(zip(split_audio, split_audio_filenames)):
+  for i, (audio_chunk, audio_filename) in enumerate(zip(split_audio, split_filenames)):
     audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
     est_ns = transcribe_audio(audio, inference_model)
     download_filename = audio_filename.rsplit('.', 1)[0] + '.midi'

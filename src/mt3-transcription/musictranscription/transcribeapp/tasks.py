@@ -56,10 +56,9 @@ def generate_midi_from_audio(audio_midi_id):
   AUDIO_CHUNK_LENGTH = 5000
   # check if audio is an mp3 or wav file
 
-  split_audio, split_audio_filenames = split_audio_segments(audio_midi, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+  split_audio, split_filenames = split_audio_segments(audio_midi, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
   
-
-  midi_files = transcribe_and_download(audio_midi, split_audio, split_audio_filenames, inference_model)
+  midi_files = transcribe_and_download(audio_midi, split_audio, split_filenames, inference_model)
   # midi_files = ['content/0.midi', 'content/1.midi', 'content/2.midi']
   if is_midi2wav:
     wav_files = midi_files_to_wav(midi_files, 'output.wav')
