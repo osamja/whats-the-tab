@@ -78,10 +78,6 @@ def generate_midi_from_audio(audio_midi_id):
   acoustic_guitar_midi = copy_acoustic_guitar_events(midi_files, output_file)
   midi_file, midi_filename = acoustic_guitar_midi, output_file
 
-  # output_file = 'stitched.midi'
-  # output_midi = stitch_midi_files(midi_files, output_file)
-  # midi_file, midi_filename = output_midi, output_file
-
   print(f"Acoustic guitar events copied to '{output_file}'")
 
   # Assuming `output_midi` is your MidiFile object
