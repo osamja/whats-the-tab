@@ -60,7 +60,10 @@ def generate_midi_from_audio(audio_midi_id):
 
   split_filenames = getSplitFilenames(audio_midi)
   
-  midi_files = transcribe_and_download(audio_midi, split_filenames, inference_model)
+  transcribe_and_download(audio_midi, split_filenames, inference_model)
+
+  midi_files = getSplitMIDIFiles(audio_midi)
+
   if is_midi2wav:
     wav_files = midi_files_to_wav(midi_files, 'output.wav')
     # Combine all WAV files into one
@@ -97,6 +100,12 @@ def generate_midi_from_audio(audio_midi_id):
 
   audio_midi.status = 'completed'
   audio_midi.save()
+
+def getSplitMIDIFiles(audio_midi):
+  split_midi_files = []
+  for midi_chunk in audio_midi.midi_chunks.all():
+    split_midi_files.append(midi_chunk.midi_file.path)
+  return split_midi_files
 
 def getSplitFilenames(audio_midi):
   split_filenames = []
