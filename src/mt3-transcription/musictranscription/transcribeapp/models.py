@@ -15,7 +15,7 @@ class AudioMIDI(models.Model):
 
 class AudioChunk(models.Model):
     audio_midi = models.ForeignKey(AudioMIDI, on_delete=models.CASCADE, related_name='audio_chunks')
-    chunk_file = models.FileField(upload_to='audios/')
+    chunk_file = models.FileField(upload_to='audio_chunks/')
     segment_index = models.IntegerField(default=0)  # Order of the chunk
 
     def __str__(self):

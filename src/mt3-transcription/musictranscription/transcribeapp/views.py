@@ -108,7 +108,6 @@ def transcribe(request):
 
 @csrf_exempt  # @todo remove for prod
 def download_midi(request, audio_midi_id):
-    # import pdb; pdb.set_trace()
     try:
         audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
         # Assuming midi_file is the field name in your model where the file path is stored
