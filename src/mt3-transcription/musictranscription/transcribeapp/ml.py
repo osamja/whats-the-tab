@@ -269,15 +269,18 @@ def split_audio_segments(audio_midi, chunk_length_ms=2000, num_chunks=5):
 
     file_counter = 0
 
-    # Splitting the audio
-    chunks = []
+    tmp_chunk_names = []
 
-    while start_ms < length_ms and len(chunks) < num_chunks:
+    # Delete existing chunks
+    AudioChunk.objects.filter(audio_midi=audio_midi).delete()
+
+    while start_ms < length_ms and file_counter < num_chunks:
         # Extract the chunk
         chunk = audio[start_ms:end_ms]
         # Save the chunk as a separate file
         chunk_name = f"{audio_midi.id}-{file_counter}.wav"
         chunk.export(chunk_name, format="wav")
+        tmp_chunk_names.append(chunk_name)
 
         # Create a file-like object from the chunk data
         with open(chunk_name, 'rb') as chunk_file:
@@ -290,17 +293,14 @@ def split_audio_segments(audio_midi, chunk_length_ms=2000, num_chunks=5):
                 segment_index=file_counter
             )
 
-        split_filenames.append(chunk_file_obj.name)
-
-        # Append the chunk to the list
-        chunks.append(chunk)
-
         # Move to the next chunk
         start_ms = end_ms
         end_ms += chunk_length_ms
         file_counter += 1
 
-    return chunks, split_filenames
+    # delete the temporary chunk files
+    for chunk_name in tmp_chunk_names:
+        os.remove(chunk_name)
 
 def transcribe_audio(audio, inference_model, play=False):
   est_ns = inference_model(audio)
@@ -318,10 +318,10 @@ def download_midi(est_ns, download_path='transcription.midi'):
   note_seq.sequence_proto_to_midi_file(est_ns, download_path)
   # files.download('/tmp/transcribed.mid')
 
-def transcribe_and_download(audio_midi, split_audio, split_filenames, inference_model):
+def transcribe_and_download(audio_midi, split_filenames, inference_model):
   download_filenames = []
 
-  for i, (audio_chunk, audio_filename) in enumerate(zip(split_audio, split_filenames)):
+  for i, (audio_filename) in enumerate(split_filenames):
     audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
     est_ns = transcribe_audio(audio, inference_model)
     download_filename = audio_filename.rsplit('.', 1)[0] + '.midi'

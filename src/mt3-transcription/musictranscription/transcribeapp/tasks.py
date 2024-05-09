@@ -56,10 +56,11 @@ def generate_midi_from_audio(audio_midi_id):
   AUDIO_CHUNK_LENGTH = 5000
   # check if audio is an mp3 or wav file
 
-  split_audio, split_filenames = split_audio_segments(audio_midi, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+  split_audio_segments(audio_midi, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
+
+  split_filenames = getSplitFilenames(audio_midi)
   
-  midi_files = transcribe_and_download(audio_midi, split_audio, split_filenames, inference_model)
-  # midi_files = ['content/0.midi', 'content/1.midi', 'content/2.midi']
+  midi_files = transcribe_and_download(audio_midi, split_filenames, inference_model)
   if is_midi2wav:
     wav_files = midi_files_to_wav(midi_files, 'output.wav')
     # Combine all WAV files into one
@@ -96,6 +97,12 @@ def generate_midi_from_audio(audio_midi_id):
 
   audio_midi.status = 'completed'
   audio_midi.save()
+
+def getSplitFilenames(audio_midi):
+  split_filenames = []
+  for audio_chunk in audio_midi.audio_chunks.all():
+    split_filenames.append(audio_chunk.chunk_file.path)
+  return split_filenames
 
 def get_audio_filename(is_mp4=False):
   fileHash = uuid.uuid4()
