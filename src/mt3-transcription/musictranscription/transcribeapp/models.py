@@ -20,3 +20,11 @@ class AudioChunk(models.Model):
 
     def __str__(self):
         return f"Chunk {self.segment_index} for {self.audio_midi.audio_filename}"
+
+class MIDIChunk(models.Model):
+    audio_midi = models.ForeignKey(AudioMIDI, on_delete=models.CASCADE, related_name='midi_chunks')
+    midi_file = models.FileField(upload_to='midi_chunks/')
+    segment_index = models.IntegerField(default=0)  # Order of the MIDI segment
+
+    def __str__(self):
+        return f"MIDI Chunk {self.segment_index} for {self.audio_midi.audio_filename}"

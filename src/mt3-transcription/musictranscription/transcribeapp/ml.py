@@ -33,11 +33,10 @@ import matplotlib.pyplot as plt
 from mido import MidiFile, MidiTrack
 from pydub import AudioSegment
 
-from .models import AudioMIDI, AudioChunk
+from .models import AudioMIDI, AudioChunk, MIDIChunk
 import dramatiq
 import io
 from django.core.files import File
-
 
 from midi2audio import FluidSynth
 
@@ -316,23 +315,28 @@ def transcribe_audio(audio, inference_model, play=False):
 
 def download_midi(est_ns, download_path='transcription.midi'):
   note_seq.sequence_proto_to_midi_file(est_ns, download_path)
-  # files.download('/tmp/transcribed.mid')
 
 def transcribe_and_download(audio_midi, split_filenames, inference_model):
-  download_filenames = []
+    for i, audio_filename in enumerate(split_filenames):
+        audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
+        est_ns = transcribe_audio(audio, inference_model)
 
-  for i, (audio_filename) in enumerate(split_filenames):
-    audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
-    est_ns = transcribe_audio(audio, inference_model)
-    download_filename = audio_filename.rsplit('.', 1)[0] + '.midi'
-    download_midi(est_ns, download_filename)
-    download_filenames.append(download_filename)
+        # Create a MIDI file name
+        midi_filename = 'midi_chunks/' + audio_filename.rsplit('/', 1)[1].rsplit('.', 1)[0] + '.midi'
+        download_midi(est_ns, midi_filename)
 
-    # Update current segment
-    audio_midi.current_segment = i + 1
-    audio_midi.save()  # Save the progress after each segment is transcribed
+        # Save the MIDI file to a new MIDIChunk instance
+        with open(midi_filename, 'rb') as midi_file:
+            midi_chunk = MIDIChunk(
+                audio_midi=audio_midi,
+                midi_file=File(midi_file, name=os.path.basename(midi_filename)),
+                segment_index=i
+            )
+            midi_chunk.save()
 
-  return download_filenames
+        # Update current segment
+        audio_midi.current_segment = i + 1
+        audio_midi.save()
 
 def plot_note_on_times(midi_file_path):
     midi_file = MidiFile(midi_file_path)
@@ -471,8 +475,7 @@ def sayHi():
     print("Hi from ml.py")
 
 def midi_files_to_wav(midi_files, output_file):
-  # Configuration
-  fs = FluidSynth()
+  fs = FluidSynth('SGM-v2.01-Sal-Guit-Bass-V1.3.sf2')
 
   # Convert each MIDI file to WAV
   wav_files = []
@@ -483,6 +486,7 @@ def midi_files_to_wav(midi_files, output_file):
       wav_files.append(output_wav)
 
   return wav_files
+
 def combine_wavs(wav_files):
     """Combine multiple WAV files into a single WAV file and return the binary data."""
     combined = AudioSegment.empty()
