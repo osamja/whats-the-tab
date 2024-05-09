@@ -317,6 +317,9 @@ def download_midi(est_ns, download_path='transcription.midi'):
   note_seq.sequence_proto_to_midi_file(est_ns, download_path)
 
 def transcribe_and_download(audio_midi, split_filenames, inference_model):
+    # Delete existing midi chunks
+    MIDIChunk.objects.filter(audio_midi=audio_midi).delete()
+
     for i, audio_filename in enumerate(split_filenames):
         audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
         est_ns = transcribe_audio(audio, inference_model)
