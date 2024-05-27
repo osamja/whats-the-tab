@@ -16,10 +16,7 @@ import t5x
 import nest_asyncio
 nest_asyncio.apply()
 
-import torch
 import torch.nn.functional as F
-from transformers import AutoFeatureExtractor, WhisperModel, WhisperConfig, WhisperProcessor
-import transformers
 
 from mt3 import metrics_utils
 from mt3 import models
@@ -248,6 +245,7 @@ class InferenceModel(object):
     return tokens
 
 def split_audio_segments(audio_midi, chunk_length_ms=2000, num_chunks=5):
+    """Split the audio file into segments of chunk_length_ms and save them as AudioChunk objects."""
     audio = audio_midi.audio_file
 
     # if audio is mp3, load the mp3 file
@@ -308,9 +306,6 @@ def transcribe_audio(audio, inference_model, play=False):
     note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
                            sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
 
-  # note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
-                        # sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
-  # note_seq.plot_sequence(est_ns)
   return est_ns
 
 def download_midi(est_ns, download_path='transcription.midi'):
@@ -341,166 +336,4 @@ def transcribe_and_download(audio_midi, split_filenames, inference_model):
         audio_midi.current_segment = i + 1
         audio_midi.save()
 
-def plot_note_on_times(midi_file_path):
-    midi_file = MidiFile(midi_file_path)
 
-    # Initialize lists to store note_on times for each track
-    note_on_times = []
-
-    for i, track in enumerate(midi_file.tracks[1:]):  # Skip the first track
-        cumulative_time = 0
-        track_times = []
-
-        for msg in track:
-            cumulative_time += msg.time
-            if msg.type == 'note_on' and msg.velocity > 0:  # Check for actual note_on event
-                track_times.append(cumulative_time)
-
-        print(f"Cumulative time: {cumulative_time} for track {i}")
-        note_on_times.append(track_times)
-
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    for i, times in enumerate(note_on_times):
-        plt.plot(times, [i+1] * len(times), 'o', label=f'Track {i+2} Note On Events')  # i+2 because we skipped the first track
-
-    plt.yticks(range(1, len(note_on_times) + 1), [f'Track {i+2}' for i in range(len(note_on_times))])
-    plt.xlabel('Time (ticks)')
-    plt.title('Note On Event Times for Tracks (Excluding First Track)')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-
-def copy_acoustic_guitar_events(midi_files, output_file):
-    # Create a new MIDI file for the output
-    output_midi = MidiFile()
-
-    metadata_track = MidiTrack()
-    acoustic_track = MidiTrack()
-    output_midi.tracks.append(metadata_track)
-
-    end_of_track_msg = None
-
-    # Process the first MIDI file to keep its tempo and time signature
-    first_midi = MidiFile(midi_files[0])
-    for msg in first_midi.tracks[0]:
-        if msg.is_meta:
-            metadata_track.append(msg.copy())
-
-    # set the ticks per beat in output midi to be the same as first midi
-    output_midi.ticks_per_beat = first_midi.ticks_per_beat
-
-    for file_path in midi_files:
-        midi_file = MidiFile(file_path)
-
-        for track_idx, track in enumerate(midi_file.tracks):
-            # Flag to track whether we are currently copying events
-            copy_events = False
-
-            for msg_idx, msg in enumerate(track):
-                # Check for program change messages
-                if msg.type == 'program_change' and msg.program == 24:
-                    # Start copying when program 24 (acoustic guitar) is encountered
-                    copy_events = True
-                elif msg.type == 'program_change' and msg.program != 24:
-                    # Stop copying if a different program is set
-                    copy_events = False
-
-                if copy_events:
-                  # Check if acoustic track is empty
-                  if len(acoustic_track) == 0 and msg.type == 'program_change':
-                    acoustic_track.append(msg.copy())
-                    continue
-
-                  # Add end of track message if last message
-                  if msg_idx == len(track) - 1 and msg.type == 'end_of_track':
-                    end_of_track_msg = msg.copy()
-
-                  # Ignore end of track messages and program change events
-                  if msg.type == 'end_of_track' or msg.type == 'program_change':
-                      continue
-
-                  # Copy the event to the new track
-                  acoustic_track.append(msg.copy())
-
-    # Add the end of track message to the acoustic track
-    if end_of_track_msg is not None:
-        acoustic_track.append(end_of_track_msg)
-
-    output_midi.tracks.append(acoustic_track)
-    # Save the output MIDI file
-    output_midi.save(output_file)
-    return output_midi
-
-def stitch_midi_files(midi_files, output_file):
-    # Create a new MIDI file for the output
-    output_midi = MidiFile()
-    accumulated_time = 0  # Time shift to apply to each file's events
-    final_track = MidiTrack()  # Track to hold all events
-
-    # Process each MIDI file
-    for file_index, file_path in enumerate(midi_files):
-        midi_file = MidiFile(file_path)
-
-        # Merge all tracks into one for simplicity
-        merged_track = MidiTrack()
-        for track in midi_file.tracks:
-            for msg in track:
-                # Add time to each message to adjust for the accumulated time from previous files
-                merged_track.append(msg.copy(time=msg.time + accumulated_time))
-        
-        # Update accumulated_time for the next file, ensuring continuity
-        # Calculate total time in the current track
-        total_time = sum(msg.time for msg in merged_track if not msg.is_meta)
-        accumulated_time += total_time
-
-        # Append all events from merged_track to the final_track
-        final_track += merged_track
-
-    # Add the compiled track to the output MIDI file
-    output_midi.tracks.append(final_track)
-
-    # Save the output MIDI file
-    output_midi.save(output_file)
-    return output_midi
-
-def delete_midi_and_mp3s():
-  # delete all the midi and mp3 files stored in /content such as /content/0.mp3, /content/0.midi, etc..
-  for file in os.listdir('/content'):
-    # do not delete 3_why_georgia or why_georgia-30.mp3
-    if file.endswith('.mp3'):
-      os.remove(os.path.join('/content', file))
-    elif file.endswith('.midi'):
-      os.remove(os.path.join('/content', file))
-
-def sayHi():
-    print("Hi from ml.py")
-
-def midi_files_to_wav(midi_files, output_file):
-  fs = FluidSynth('SGM-v2.01-Sal-Guit-Bass-V1.3.sf2')
-
-  # Convert each MIDI file to WAV
-  wav_files = []
-  for midi_file in midi_files:
-      output_wav = f"{os.path.splitext(midi_file)[0]}.wav"
-      print(f"Converting {midi_file} to {output_wav}")
-      fs.midi_to_audio(midi_file, output_wav)
-      wav_files.append(output_wav)
-
-  return wav_files
-
-def combine_wavs(wav_files):
-    """Combine multiple WAV files into a single WAV file and return the binary data."""
-    combined = AudioSegment.empty()
-    for wav_file in wav_files:
-        audio = AudioSegment.from_wav(wav_file)
-        combined += audio
-    # Export combined audio to byte stream
-    byte_stream = io.BytesIO()
-    combined.export(byte_stream, format='wav')
-    return byte_stream.getvalue()
-
-
-
-   

@@ -23,7 +23,7 @@ Design Decisions
 ```
 cd ~/whats-the-tab/src/mt3-transcription/musictranscription
 source ../venv/bin/activate
-python manage.py runserver 0:8000
+python manage.py runserver 0:8008
 ```
 
 * Start tailscale on desktop
