@@ -75,13 +75,13 @@ def transcribe(request):
     if request.method == 'POST':
       audio_midi_id = request.POST['audio_midi_id']
       
-      num_transcription_segments = request.POST.get('num_transcription_segments', 10)
+      num_transcription_segments = request.POST.get('num_transcription_segments', 1)
+      audio_chunk_length = request.POST.get('audio_chunk_length', 10)
       audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
-      is_midi2wav = request.POST.get('is_midi2wav', True)
 
       # set audio midi object fields
-      audio_midi.num_transcription_segments = num_transcription_segments
-      audio_midi.is_midi2wav = is_midi2wav
+      audio_midi.num_transcription_segments = int(num_transcription_segments)
+      audio_midi.audio_chunk_length = int(audio_chunk_length)
       audio_midi.status = 'processing'
       audio_midi.save()
 
@@ -107,32 +107,6 @@ def transcribe(request):
         return JsonResponse({'error': 'Internal server error'}, status=500)
 
 @csrf_exempt  # @todo remove for prod
-def download_midi(request, audio_midi_id):
-    try:
-        audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
-        # Assuming midi_file is the field name in your model where the file path is stored
-        response = FileResponse(audio_midi.midi_file.open(), as_attachment=True, filename=audio_midi.midi_file.name)
-        return response
-    except AudioMIDI.DoesNotExist:
-        raise Http404("No MIDI file found for the provided ID.")
-    except Exception as e:
-        # General exception handler for any other unanticipated exceptions
-        return JsonResponse({'error': 'Internal server error'}, status=500)
-    
-@csrf_exempt
-def download_midi_wav(request, audio_midi_id):
-    try:
-        audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
-        # Assuming midi_wav_file is the field name in your model where the file path is stored
-        response = FileResponse(audio_midi.midi_wav_file.open(), as_attachment=True, filename=audio_midi.midi_wav_file.name)
-        return response
-    except AudioMIDI.DoesNotExist:
-        raise Http404("No MIDI WAV file found for the provided ID.")
-    except Exception as e:
-        # General exception handler for any other unanticipated exceptions
-        return JsonResponse({'error': 'Internal server error'}, status=500)
-
-@csrf_exempt  # @todo remove for prod
 def audio_status(request, audio_midi_id):
     try:
         audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
@@ -140,8 +114,6 @@ def audio_status(request, audio_midi_id):
             'audio_midi_id': audio_midi.id,
             'audio_filename': audio_midi.audio_filename,
             # 'audio_file': audio_midi.audio_file.name,
-            'midi_filename': audio_midi.midi_file.name if audio_midi.midi_file else None,
-            'midi_wav_filename': audio_midi.midi_wav_file.name if audio_midi.midi_wav_file else None,
             'created_at': audio_midi.created_at,
             'updated_at': audio_midi.updated_at,
             'status': audio_midi.status,
