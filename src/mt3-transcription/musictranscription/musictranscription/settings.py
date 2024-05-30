@@ -25,14 +25,17 @@ SECRET_KEY = 'django-insecure-b98rd+t)ps#-7ov^+tiu_%gtri9#(1y0+h^gg0mu(n#8g)gw9#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [
-  '172.18.250.65',
-  '127.0.0.1',
-  '100.85.133.118',
-  'pyaar.ai',
-  'zubyj.com',
-  'localhost',
-]
+# ALLOWED_HOSTS = [
+#   '172.18.250.65',
+#   '127.0.0.1',
+#   '100.85.133.118',
+#   'pyaar.ai',
+#   'zubyj.com',
+#   'localhost',
+# ]
+
+ALLOWED_HOSTS = ['*']
+
 
 CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000']
 

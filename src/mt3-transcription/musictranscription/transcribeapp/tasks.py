@@ -42,6 +42,7 @@ def download_youtube_audio_and_save(audio_midi_id):
 
 @dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
 def generate_midi_from_audio(audio_midi_id):
+  # import pdb; pdb.set_trace()
   audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
   inference_model = InferenceModel(checkpoint_path, MODEL)
 

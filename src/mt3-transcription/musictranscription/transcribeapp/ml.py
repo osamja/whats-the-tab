@@ -59,6 +59,10 @@ class InferenceModel(object):
 
     gin_files = ['mt3/gin/model.gin',
                  f'mt3/gin/{model_type}.gin']
+        
+    print(f"gin_files: {gin_files}")  # Debug print to check paths
+    # print my current working directory
+    print(os.getcwd())
 
     self.batch_size = 8
     self.outputs_length = 1024
@@ -200,8 +204,8 @@ class InferenceModel(object):
   def _audio_to_frames(self, audio):
     """Compute spectrogram frames from audio."""
     frame_size = self.spectrogram_config.hop_width
-    padding = [0, frame_size - len(audio) % frame_size]
-    audio = np.pad(audio, padding, mode='constant')
+    padding = [0, frame_size - len(audio) % frame_size]   # we'll always pad to the next frame. [0, pad_width] means pad nothing at beginning, but pad pad_width to end of array with default value 0
+    audio = np.pad(audio, padding, mode='constant')   
     frames = spectrograms.split_audio(audio, self.spectrogram_config)
     num_frames = len(audio) // frame_size
     times = np.arange(num_frames) / self.spectrogram_config.frames_per_second

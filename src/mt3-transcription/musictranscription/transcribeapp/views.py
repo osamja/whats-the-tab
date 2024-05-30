@@ -71,6 +71,7 @@ def upload_from_youtube(request):
 
 @csrf_exempt  # @todo remove for prod
 def transcribe(request):
+#   import pdb; pdb.set_trace()
   try:
     if request.method == 'POST':
       audio_midi_id = request.POST['audio_midi_id']
@@ -104,7 +105,7 @@ def transcribe(request):
         # audio_midi.status = 'failed: ' + str(e)
         # audio_midi.save()
         # General exception handler for any other unanticipated exceptions
-        return JsonResponse({'error': 'Internal server error'}, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt  # @todo remove for prod
 def audio_status(request, audio_midi_id):
