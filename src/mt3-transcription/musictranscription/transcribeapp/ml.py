@@ -59,10 +59,6 @@ class InferenceModel(object):
 
     gin_files = ['mt3/gin/model.gin',
                  f'mt3/gin/{model_type}.gin']
-        
-    print(f"gin_files: {gin_files}")  # Debug print to check paths
-    # print my current working directory
-    print(os.getcwd())
 
     self.batch_size = 8
     self.outputs_length = 1024
@@ -211,22 +207,54 @@ class InferenceModel(object):
     times = np.arange(num_frames) / self.spectrogram_config.frames_per_second
     return frames, times
 
+  # def preprocess(self, ds):
+  #   pp_chain = [
+  #       functools.partial(
+  #           t5.data.preprocessors.split_tokens_to_inputs_length,
+  #           sequence_length=self.sequence_length,
+  #           output_features=self.output_features,
+  #           feature_key='inputs',
+  #           additional_feature_keys=['input_times']),
+  #       # Cache occurs here during training.
+  #       preprocessors.add_dummy_targets,
+  #       functools.partial(
+  #           preprocessors.compute_spectrograms,
+  #           spectrogram_config=self.spectrogram_config)
+  #   ]
+  #   for pp in pp_chain:
+  #     ds = pp(ds)
+  #   return ds
+
   def preprocess(self, ds):
-    pp_chain = [
-        functools.partial(
-            t5.data.preprocessors.split_tokens_to_inputs_length,
-            sequence_length=self.sequence_length,
-            output_features=self.output_features,
-            feature_key='inputs',
-            additional_feature_keys=['input_times']),
-        # Cache occurs here during training.
-        preprocessors.add_dummy_targets,
-        functools.partial(
-            preprocessors.compute_spectrograms,
-            spectrogram_config=self.spectrogram_config)
-    ]
-    for pp in pp_chain:
-      ds = pp(ds)
+    # Define the preprocessing functions with all arguments
+    def split_tokens(ds, sequence_length, output_features, feature_key, additional_feature_keys):
+        return t5.data.preprocessors.split_tokens_to_inputs_length(
+            ds, 
+            sequence_length=sequence_length,
+            output_features=output_features,
+            feature_key=feature_key,
+            additional_feature_keys=additional_feature_keys
+        )
+
+    def add_dummy_targets(ds):
+        return preprocessors.add_dummy_targets(ds)
+
+    def compute_spectrograms(ds, spectrogram_config):
+        return preprocessors.compute_spectrograms(ds, spectrogram_config=spectrogram_config)
+
+    # Apply the preprocessing steps sequentially
+    ds = split_tokens(
+        ds,
+        sequence_length=self.sequence_length,
+        output_features=self.output_features,
+        feature_key='inputs',
+        additional_feature_keys=['input_times']
+    )
+
+    ds = add_dummy_targets(ds)
+
+    ds = compute_spectrograms(ds, spectrogram_config=self.spectrogram_config)
+    
     return ds
 
   def postprocess(self, tokens, example):
