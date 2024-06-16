@@ -207,24 +207,6 @@ class InferenceModel(object):
     times = np.arange(num_frames) / self.spectrogram_config.frames_per_second
     return frames, times
 
-  # def preprocess(self, ds):
-  #   pp_chain = [
-  #       functools.partial(
-  #           t5.data.preprocessors.split_tokens_to_inputs_length,
-  #           sequence_length=self.sequence_length,
-  #           output_features=self.output_features,
-  #           feature_key='inputs',
-  #           additional_feature_keys=['input_times']),
-  #       # Cache occurs here during training.
-  #       preprocessors.add_dummy_targets,
-  #       functools.partial(
-  #           preprocessors.compute_spectrograms,
-  #           spectrogram_config=self.spectrogram_config)
-  #   ]
-  #   for pp in pp_chain:
-  #     ds = pp(ds)
-  #   return ds
-
   def preprocess(self, ds):
     # Define the preprocessing functions with all arguments
     def split_tokens(ds, sequence_length, output_features, feature_key, additional_feature_keys):
@@ -255,7 +237,22 @@ class InferenceModel(object):
 
     ds = compute_spectrograms(ds, spectrogram_config=self.spectrogram_config)
     
+    temp_ds = list(ds)
+    self.plot_spectrogram(temp_ds[0]['inputs'])
+    
     return ds
+
+  def plot_spectrogram(self, spectrogram):
+    spectrogram = spectrogram.numpy()
+    fig, ax = plt.subplots()
+    ax.imshow(spectrogram.T, aspect='auto', origin='lower', interpolation='nearest')
+    ax.set_xlabel('Time')
+    ax.set_ylabel('Frequency')
+    plt.colorbar(ax.imshow(spectrogram.T, aspect='auto', origin='lower', interpolation='nearest'))
+
+    # save the plot
+    plt.savefig('spectrogram.png')
+    
 
   def postprocess(self, tokens, example):
     tokens = self._trim_eos(tokens)

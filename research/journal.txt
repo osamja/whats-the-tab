@@ -1,0 +1,10 @@
+Week of 6/9/24
+
+TODO
+- in mt3-torch, use same cut audio as in our audio_midi
+
+IN PROGRESS
+- what's our expected spectrogram shape?
+
+DONE
+- setup launch.json debugger to run django server. (It was in the what's the tab root)

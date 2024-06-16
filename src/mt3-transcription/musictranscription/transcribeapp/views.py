@@ -16,6 +16,8 @@ import dramatiq
 from django.core.files.base import ContentFile
 
 import subprocess
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 IS_ASYNC = False
 
@@ -114,7 +116,7 @@ def audio_status(request, audio_midi_id):
         response_data = {
             'audio_midi_id': audio_midi.id,
             'audio_filename': audio_midi.audio_filename,
-            # 'audio_file': audio_midi.audio_file.name,
+            'audio_file': audio_midi.audio_file.name,
             'created_at': audio_midi.created_at,
             'updated_at': audio_midi.updated_at,
             'status': audio_midi.status,
