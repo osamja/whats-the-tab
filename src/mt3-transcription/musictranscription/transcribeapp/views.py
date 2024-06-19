@@ -76,7 +76,7 @@ def transcribe(request):
       audio_midi_id = request.POST['audio_midi_id']
       
       num_transcription_segments = request.POST.get('num_transcription_segments', 1)
-      audio_chunk_length = request.POST.get('audio_chunk_length', 10)
+      audio_chunk_length = request.POST.get('audio_chunk_length', 30)
       audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
       # set audio midi object fields
