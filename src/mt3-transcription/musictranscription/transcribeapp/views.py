@@ -16,8 +16,11 @@ import dramatiq
 from django.core.files.base import ContentFile
 
 import subprocess
+from dotenv import load_dotenv
 
-IS_ASYNC = False
+load_dotenv()
+
+IS_ASYNC = os.getenv('IS_ASYNC', 'False').lower() in ('true', '1', 't')
 
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
