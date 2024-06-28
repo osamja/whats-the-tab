@@ -1,16 +1,12 @@
 # whats-the-tab
 
-Developing
-cd to the project directory and run:
-```
-jupyter notebook
-```
+Developing: Start notebook from project directory
+`jupyter notebook`
+
 Then copy the server url, etc. http://localhost:8888/?token=ed084ae
 In the ipython notebook python kernel, paste the url into the open by url option.
 
-
 django app for transcribing music from audio files
-
 
 go live checklist
 - check @todo and remove anything that is not needed for production
@@ -30,11 +26,12 @@ Design Decisions
 
 # Bring transcribe server online
 * Start django server
-```
-cd ~/whats-the-tab/src/mt3-transcription/musictranscription
-source ../venv/bin/activate
-python manage.py runserver 0:8008
-```
+
+	Production
+	`cd ~/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi`
+
+	Development
+	`cd ~/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python manage.py runserver 0:8008`
 
 * Start tailscale on desktop
 `sudo tailscaled` or `sudo tailscale up`
@@ -42,12 +39,8 @@ python manage.py runserver 0:8008
 * Start redis server
 `redis-server`
 
-* Start dramatiq
-```
-cd ~/whats-the-tab/src/mt3-transcription/musictranscription
-source ../venv/bin/activate
-python run_dramatiq.py transcribeapp.tasks
-```
+* Start dramatiq task processor
+`cd ~/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python run_dramatiq.py transcribeapp.tasks`
 
 # Setup new desktop
 * Clone repo
