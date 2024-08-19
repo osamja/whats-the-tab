@@ -161,3 +161,4 @@ src/mt3-transcription/musictranscription/midi_2_wav/
 src/mt3-transcription/myenv
 src/mt3-transcription/output.wav
 src/mt3-transcription/musictranscription/midi_chunks/
+src/mt3-transcription/musictranscription/static/
