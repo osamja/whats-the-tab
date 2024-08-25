@@ -59,6 +59,19 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
 ]
 
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.TokenAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+ 
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
