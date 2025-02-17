@@ -20,6 +20,9 @@ from django.urls import include, path
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
+    # Authentication API endpoints
+    path('api/auth/', include('dj_rest_auth.urls')),  # Login, logout, password reset
+    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),  # Signup API
     path('transcribe/', include('transcribeapp.urls')),
 ]
 
