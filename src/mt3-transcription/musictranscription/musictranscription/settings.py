@@ -55,8 +55,14 @@ INSTALLED_APPS = [
     'corsheaders',
     'allauth',
     'allauth.account',
+    'allauth.socialaccount',
+    # Add the providers you want to enable:
+    # 'allauth.socialaccount.providers.google',
+    # 'allauth.socialaccount.providers.facebook',
     'rest_framework',
     'rest_framework.authtoken',
+    'dj_rest_auth',
+
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -66,9 +72,11 @@ CORS_ALLOWED_ORIGINS = [
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication', 
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',
+        # 'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',  # Allow open API access
     ),
 }
  
@@ -129,7 +137,23 @@ AUTHENTICATION_BACKENDS = [
 
     # `allauth` specific authentication methods, such as login by email
     'allauth.account.auth_backends.AuthenticationBackend',
+    
 ]
+
+SITE_ID = 1
+
+# Configure AllAuth settings
+ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Allow login with username OR email
+ACCOUNT_EMAIL_REQUIRED = True  # Email is mandatory
+ACCOUNT_USERNAME_REQUIRED = True  # Username is required
+# ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Require email verification for signup
+ACCOUNT_EMAIL_VERIFICATION = "optional"
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # Users must confirm email
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+ACCOUNT_EMAIL_CONFIRMATION_HMAC = True
+ACCOUNT_SIGNUP_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
 
 WSGI_APPLICATION = 'musictranscription.wsgi.application'
 
