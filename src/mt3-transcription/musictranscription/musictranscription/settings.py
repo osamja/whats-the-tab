@@ -35,7 +35,7 @@ ALLOWED_HOSTS = [
   'localhost',
 ]
 
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000', 'https://pyaar.ai']
+CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000', 'https://pyaar.ai', 'http://localhost:3000']
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

@@ -1,1 +1,0 @@
-# This file can be removed as Django Allauth provides the necessary views.
