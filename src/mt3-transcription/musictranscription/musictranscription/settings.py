@@ -35,7 +35,12 @@ ALLOWED_HOSTS = [
   'localhost',
 ]
 
-CSRF_TRUSTED_ORIGINS = ['http://127.0.0.1:8000', 'https://pyaar.ai', 'http://localhost:3000']
+CSRF_TRUSTED_ORIGINS = [
+    'http://127.0.0.1:8000', 
+    'https://pyaar.ai', 
+    'http://localhost:3000',
+    'http://173.255.217.39:3000'  # Adding your frontend domain
+]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -67,6 +72,30 @@ INSTALLED_APPS = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://173.255.217.39:3000"  # Adding your frontend domain
+]
+
+CORS_ALLOW_CREDENTIALS = True  # Allow credentials (cookies, authorization headers)
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
 ]
 
 REST_FRAMEWORK = {
@@ -145,12 +174,24 @@ SITE_ID = 1
 # Configure AllAuth settings
 ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Allow login with username OR email
 ACCOUNT_EMAIL_REQUIRED = True  # Email is mandatory
-ACCOUNT_USERNAME_REQUIRED = True  # Username is required
-# ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Require email verification for signup
-ACCOUNT_EMAIL_VERIFICATION = "optional"
-ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # Users must confirm email
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Enable email verification
+ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # Enable email confirmation requirement
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_CONFIRMATION_HMAC = True
+
+# Password reset settings
+ACCOUNT_PASSWORD_RESET_SEND_EMAIL = True
+ACCOUNT_PASSWORD_RESET_CONFIRM = True
+ACCOUNT_PASSWORD_RESET_CONFIRM_URL = 'api/auth/password/reset/confirm/{uid}/{token}'
+ACCOUNT_PASSWORD_RESET_VERIFY = True
+ACCOUNT_PASSWORD_RESET_VERIFY_URL = 'api/auth/password/reset/verify/{uid}/{token}'
+
+# Email settings
+EMAIL_BACKEND = 'musictranscription.email_backends.mailgun_backend.MailgunEmailBackend'
+MAILGUN_API_KEY = '19228350fe62f341ec57470f781b2c72-f6202374-2a886de8'
+MAILGUN_DOMAIN = 'mg.pyaar.ai'
+DEFAULT_FROM_EMAIL = 'support@pyaar.ai'
+
 ACCOUNT_SIGNUP_REDIRECT_URL = "/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
