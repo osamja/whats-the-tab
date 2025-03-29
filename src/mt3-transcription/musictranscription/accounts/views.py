@@ -36,13 +36,13 @@ class CustomConfirmEmailView(ConfirmEmailView):
         return context
 
     def get(self, *args, **kwargs):
-        try:
-            self.object = self.get_object()
-            self.logout_other_user(self.object)
-            if settings.ACCOUNT_CONFIRM_EMAIL_ON_GET:
-                return self.post(*args, **kwargs)
-        except Http404:
-            self.object = None
+        # try:
+        #     self.object = self.get_object()
+        #     self.logout_other_user(self.object)
+        #     if settings.ACCOUNT_CONFIRM_EMAIL_ON_GET:
+        #         return self.post(*args, **kwargs)
+        # except Http404:
+        #     self.object = None
             
         return super().get(*args, **kwargs) 
 
