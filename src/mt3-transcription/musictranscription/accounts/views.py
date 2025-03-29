@@ -8,43 +8,9 @@ from django.views.generic import TemplateView
 class CustomConfirmEmailView(ConfirmEmailView):
     template_name = "account/email_confirm.html"
 
-    def get_object(self, queryset=None):
-        import pdb; pdb.set_trace()
-        key = self.kwargs["key"]
-        model = get_emailconfirmation_model()
-        emailconfirmation = model.from_key(key)
-        if not emailconfirmation:
-            raise Http404()
-        return emailconfirmation
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        try:
-            self.object = self.get_object()
-            self.logout_other_user(self.object)
-            if settings.ACCOUNT_CONFIRM_EMAIL_ON_GET:
-                self.post(self.request, *self.args, **self.kwargs)
-        except Http404:
-            self.object = None
-
-        # Determine redirect URL based on verification status
-        if self.object and self.object.email_address.verified:
-            context['redirect_url'] = f"{settings.FRONTEND_URL}/email-confirmed?status=success"
-        else:
-            context['redirect_url'] = f"{settings.FRONTEND_URL}/email-confirmed?status=error"
-            
-        return context
-
+    # Since ACCOUNT_CONFIRM_EMAIL_ON_GET is enabled, this get request will confirm our email
     def get(self, *args, **kwargs):
-        # try:
-        #     self.object = self.get_object()
-        #     self.logout_other_user(self.object)
-        #     if settings.ACCOUNT_CONFIRM_EMAIL_ON_GET:
-        #         return self.post(*args, **kwargs)
-        # except Http404:
-        #     self.object = None
-            
-        return super().get(*args, **kwargs) 
+        return super().get(*args, **kwargs)
 
 # accounts/views.py
 
