@@ -147,7 +147,9 @@ ROOT_URLCONF = 'musictranscription.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'accounts', 'templates'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -179,12 +181,36 @@ ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # Enable email confirmation requirement
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_CONFIRMATION_HMAC = True
 
+# dj-rest-auth settings
+REST_AUTH = {
+    'USE_JWT': False,
+    'TOKEN_MODEL': 'rest_framework.authtoken.models.Token',
+    'JWT_AUTH_COOKIE': None,
+    'JWT_AUTH_REFRESH_COOKIE': None,
+    'JWT_AUTH_HTTPONLY': False,
+    'JWT_AUTH_SECURE': False,
+    'JWT_AUTH_SAMESITE': 'Lax',
+    'JWT_AUTH_RETURN_EXPIRATION': False,
+    'JWT_AUTH_COOKIE_USE_CSRF': False,
+    'JWT_AUTH_COOKIE_ENFORCE_CSRF_ON_UNAUTHENTICATED': False,
+    'OLD_PASSWORD_FIELD_ENABLED': True,
+    'LOGOUT_ON_PASSWORD_CHANGE': False,
+    'SESSION_LOGIN': True,
+    'USE_SESSION_AUTH': True,
+    'EMAIL_VERIFY_URL': 'api/auth/registration/account-confirm-email/{key}/',
+    'PASSWORD_RESET_VERIFY_URL': 'api/auth/password/reset/verify/{uid}/{token}/',
+    'PASSWORD_RESET_CONFIRM_URL': 'api/auth/password/reset/confirm/{uid}/{token}/',
+}
+
 # Password reset settings
 ACCOUNT_PASSWORD_RESET_SEND_EMAIL = True
 ACCOUNT_PASSWORD_RESET_CONFIRM = True
 ACCOUNT_PASSWORD_RESET_CONFIRM_URL = 'api/auth/password/reset/confirm/{uid}/{token}'
 ACCOUNT_PASSWORD_RESET_VERIFY = True
 ACCOUNT_PASSWORD_RESET_VERIFY_URL = 'api/auth/password/reset/verify/{uid}/{token}'
+
+# Frontend URL
+FRONTEND_URL = 'https://pyaar.ai'  # Change this to your frontend URL
 
 # Email settings
 EMAIL_BACKEND = 'musictranscription.email_backends.mailgun_backend.MailgunEmailBackend'
