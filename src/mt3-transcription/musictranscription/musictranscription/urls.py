@@ -17,23 +17,21 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 from django.contrib.auth import views as auth_views
-from dj_rest_auth.registration.views import ConfirmEmailView
+from accounts.views import CustomConfirmEmailView
 
 urlpatterns = [
+    # Email confirmation URL
+    path('api/auth/registration/account-confirm-email/<str:key>/', CustomConfirmEmailView.as_view(), name='account_confirm_email'),
+    
     path('admin/', admin.site.urls),
     path('api/accounts/', include('accounts.urls')),
     # Authentication API endpoints
     path('api/auth/', include('dj_rest_auth.urls')),  # Login, logout, password reset
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),  # Signup API
     path('transcribe/', include('transcribeapp.urls')),
-
-    path(
-        "api/auth/registration/account-confirm-email/<key>/",
-        ConfirmEmailView.as_view(),
-        name='account_confirm_email'
-    ),
     
-    # # Password reset URLs
+    
+    # Password reset URLs
     path('api/auth/password/reset/confirm/<uidb64>/<token>/',
          auth_views.PasswordResetConfirmView.as_view(),
          name='password_reset_confirm'),
