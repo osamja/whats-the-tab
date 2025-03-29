@@ -1,4 +1,5 @@
 from allauth.account.views import ConfirmEmailView
+from allauth.account.models import EmailConfirmation, EmailAddress, get_emailconfirmation_model
 from django.shortcuts import redirect
 from django.conf import settings
 from django.http import Http404
@@ -6,6 +7,15 @@ from django.views.generic import TemplateView
 
 class CustomConfirmEmailView(ConfirmEmailView):
     template_name = "account/email_confirm.html"
+
+    def get_object(self, queryset=None):
+        import pdb; pdb.set_trace()
+        key = self.kwargs["key"]
+        model = get_emailconfirmation_model()
+        emailconfirmation = model.from_key(key)
+        if not emailconfirmation:
+            raise Http404()
+        return emailconfirmation
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
