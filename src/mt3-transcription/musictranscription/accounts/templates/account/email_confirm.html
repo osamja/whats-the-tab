@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 text-center">
+            <h2>Confirming your email...</h2>
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-3">Please wait while we verify your email address.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Redirect after a short delay
+    setTimeout(function () {
+        window.location.href = "{{ redirect_url }}";
+    }, 5000);
+</script>
+{% endblock %}
