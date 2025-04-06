@@ -28,10 +28,10 @@ Design Decisions
 * Start django server
 
 	Production
-	`cd ~/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi`
+	`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi`
 
 	Development
-	`cd ~/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python manage.py runserver 0:8008`
+	`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python manage.py runserver 0:8008`
 
 * Start tailscale on desktop
 `sudo tailscaled` or `sudo tailscale up`
@@ -40,7 +40,7 @@ Design Decisions
 `redis-server`
 
 * Start dramatiq task processor
-`cd ~/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python run_dramatiq.py transcribeapp.tasks`
+`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python run_dramatiq.py transcribeapp.tasks`
 
 # Setup new desktop
 * Clone repo
@@ -50,7 +50,7 @@ Design Decisions
 # Troubleshooting
 * Shell into django server 
 ```
-cd ~/whats-the-tab/src/mt3-transcription/musictranscription
+cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription
 source ../venv/bin/activate
 python manage.py shell
 ```
