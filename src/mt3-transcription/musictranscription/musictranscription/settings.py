@@ -26,6 +26,9 @@ SECRET_KEY = 'django-insecure-b98rd+t)ps#-7ov^+tiu_%gtri9#(1y0+h^gg0mu(n#8g)gw9#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# Frontend URL for redirects
+FRONTEND_URL = 'https://pyaar.ai'
+
 ALLOWED_HOSTS = [
   '172.18.250.65',
   '127.0.0.1',
@@ -208,9 +211,6 @@ ACCOUNT_PASSWORD_RESET_CONFIRM = True
 ACCOUNT_PASSWORD_RESET_CONFIRM_URL = 'api/auth/password/reset/confirm/{uid}/{token}'
 ACCOUNT_PASSWORD_RESET_VERIFY = True
 ACCOUNT_PASSWORD_RESET_VERIFY_URL = 'api/auth/password/reset/verify/{uid}/{token}'
-
-# Frontend URL
-FRONTEND_URL = 'https://pyaar.ai'  # Change this to your frontend URL
 
 # Email settings
 EMAIL_BACKEND = 'musictranscription.email_backends.mailgun_backend.MailgunEmailBackend'
