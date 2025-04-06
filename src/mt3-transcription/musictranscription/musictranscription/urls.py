@@ -16,8 +16,14 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
-from django.contrib.auth import views as auth_views
-from accounts.views import CustomConfirmEmailView
+from dj_rest_auth.views import PasswordResetConfirmView
+from accounts.views import (
+    CustomConfirmEmailView,
+    CustomPasswordResetFromKeyView,
+    CustomPasswordSetView,
+    CustomPasswordChangeView,
+    ResendEmailVerificationView
+)
 
 urlpatterns = [
     # Email confirmation URL
@@ -30,13 +36,23 @@ urlpatterns = [
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),  # Signup API
     path('transcribe/', include('transcribeapp.urls')),
     
-    
-    # Password reset URLs
-    path('api/auth/password/reset/confirm/<uidb64>/<token>/',
-         auth_views.PasswordResetConfirmView.as_view(),
+    # Password reset confirm URL
+    path('api/auth/password/reset/confirm/<str:uidb64>/<str:token>/',
+         PasswordResetConfirmView.as_view(),
          name='password_reset_confirm'),
-    path('api/auth/password/reset/complete/',
-         auth_views.PasswordResetCompleteView.as_view(),
-         name='password_reset_complete'),
+         
+    # Password management URLs
+    path('api/auth/password/reset/key/<uidb36>/<key>/',
+         CustomPasswordResetFromKeyView.as_view(),
+         name='account_reset_password_from_key'),
+    path('api/auth/password/set/',
+         CustomPasswordSetView.as_view(),
+         name='account_set_password'),
+    path('api/auth/password/change/',
+         CustomPasswordChangeView.as_view(),
+         name='account_change_password'),
+    path('api/auth/email/resend-verification/',
+         ResendEmailVerificationView.as_view(),
+         name='account_resend_verification'),
 ]
 
