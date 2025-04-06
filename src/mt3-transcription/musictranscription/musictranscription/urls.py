@@ -36,9 +36,9 @@ urlpatterns = [
     path('api/auth/registration/', include('dj_rest_auth.registration.urls')),  # Signup API
     path('transcribe/', include('transcribeapp.urls')),
     
-    # Password reset confirm URL
+    # Password reset confirm URL - using our custom view
     path('api/auth/password/reset/confirm/<str:uidb64>/<str:token>/',
-         PasswordResetConfirmView.as_view(),
+         CustomPasswordResetFromKeyView.as_view(),
          name='password_reset_confirm'),
          
     # Password management URLs
