@@ -67,7 +67,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'dj_rest_auth',
-
+    'accounts',  # Add the accounts app
 ]
 
 CORS_ALLOWED_ORIGINS = [
