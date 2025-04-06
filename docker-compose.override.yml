@@ -1,0 +1,30 @@
+version: '3.3'
+
+services:
+  django:
+    build:
+      args:
+        # Set to true if you have a GPU and want to use it for transcription
+        - USE_GPU=false
+    # Uncomment and modify these for GPU usage
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  worker:
+    build:
+      args:
+        # Set to true if you have a GPU and want to use it for transcription
+        - USE_GPU=false
+    # Uncomment and modify these for GPU usage
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu] 
