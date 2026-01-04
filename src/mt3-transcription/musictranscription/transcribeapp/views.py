@@ -107,7 +107,9 @@ def transcribe(request):
         # audio_midi.status = 'failed: ' + str(e)
         # audio_midi.save()
         # General exception handler for any other unanticipated exceptions
-        return JsonResponse({'error': 'Internal server error'}, status=500)
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'error': 'Internal server error', 'details': str(e)}, status=500)
 
 @csrf_exempt  # @todo remove for prod
 def audio_status(request, audio_midi_id):

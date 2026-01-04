@@ -107,12 +107,15 @@ class CustomPasswordChangeView(PasswordChangeView):
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from allauth.account.utils import send_email_confirmation
+from allauth.account.models import EmailAddress
 
 class ResendEmailVerificationView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         user = request.user
-        send_email_confirmation(request, user)
+        # Use the new API for sending email confirmation
+        email_address = EmailAddress.objects.get_primary(user)
+        if email_address:
+            email_address.send_confirmation(request)
         return Response({"detail": "Verification email sent."})
