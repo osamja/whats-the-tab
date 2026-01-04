@@ -4,8 +4,8 @@
 
 FROM python:3.10-slim
 RUN apt-get update
-# install python 3.10
-RUN apt-get install -y software-properties-common git
+# install python 3.10 and system dependencies
+RUN apt-get install -y software-properties-common git ffmpeg
 # RUN add-apt-repository ppa:deadsnakes/ppa
 
 # setup a virtual environment
