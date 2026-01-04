@@ -57,8 +57,12 @@ class InferenceModel(object):
     else:
       raise ValueError('unknown model_type: %s' % model_type)
 
-    gin_files = ['mt3/gin/model.gin',
-                 f'mt3/gin/{model_type}.gin']
+    # Use absolute paths for gin files
+    # __file__ is in musictranscription/transcribeapp/ml.py
+    # We need to go to mt3-transcription/mt3/gin/
+    mt3_base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    gin_files = [os.path.join(mt3_base_path, 'mt3/gin/model.gin'),
+                 os.path.join(mt3_base_path, f'mt3/gin/{model_type}.gin')]
 
     self.batch_size = 8
     self.outputs_length = 1024
