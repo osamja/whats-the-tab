@@ -12,9 +12,14 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Add mt3 to Python path
+MT3_PATH = Path(__file__).resolve().parent.parent.parent / 'mt3'
+sys.path.insert(0, str(MT3_PATH.parent))
 
 
 # Quick-start development settings - unsuitable for production
@@ -76,7 +81,9 @@ INSTALLED_APPS = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://173.255.217.39:3000"  # Adding your frontend domain
+    "http://173.255.217.39:3000",
+    "https://pyaar.ai",
+    "http://pyaar.ai"
 ]
 
 CORS_ALLOW_CREDENTIALS = True  # Allow credentials (cookies, authorization headers)
