@@ -16,8 +16,6 @@ import t5x
 import nest_asyncio
 nest_asyncio.apply()
 
-import torch.nn.functional as F
-
 from mt3 import metrics_utils
 from mt3 import models
 from mt3 import network
@@ -42,6 +40,53 @@ SF2_PATH = 'SGM-v2.01-Sal-Guit-Bass-V1.3.sf2'
 
 class InferenceModel(object):
   """Wrapper of T5X model for music transcription."""
+
+  @staticmethod
+  def _get_device_platform():
+    """Detect the platform of the first available device."""
+    try:
+        devices = jax.devices()
+        if devices:
+            return devices[0].platform
+    except Exception as e:
+        print(f"Warning: Could not detect JAX device: {e}")
+    return 'cpu'  # fallback
+
+  @staticmethod
+  def _patch_t5x_for_gpu():
+    """Monkey-patch T5X to support GPU devices.
+
+    T5X's bounds_from_last_device assumes TPU-specific attributes.
+    We patch it to handle GPU/CPU devices gracefully.
+    """
+    import t5x.partitioning as t5x_partitioning
+
+    # Store original function
+    original_bounds_from_last_device = t5x_partitioning.bounds_from_last_device
+
+    def gpu_compatible_bounds_from_last_device(last_device):
+      """Return device bounds, handling non-TPU devices."""
+      # For GPU/CPU, return a simple 1D mesh bound
+      if hasattr(last_device, 'core_on_chip'):
+        # TPU device - use original function
+        return original_bounds_from_last_device(last_device)
+      else:
+        # GPU or CPU device - return simple 1x1x1x1 bounds
+        # This creates a minimal mesh for single-device inference
+        return (1, 1, 1, 1)
+
+    # Apply the patch
+    t5x_partitioning.bounds_from_last_device = gpu_compatible_bounds_from_last_device
+
+  @staticmethod
+  def _create_partitioner(device_platform):
+    """Create appropriate partitioner based on device platform."""
+    if device_platform == 'gpu':
+        # Patch T5X to handle GPU devices before creating partitioner
+        InferenceModel._patch_t5x_for_gpu()
+
+    # Now use standard partitioner for all platforms
+    return t5x.partitioning.PjitPartitioner(num_partitions=1)
 
   def __init__(self, checkpoint_path, model_type='mt3'):
 
@@ -69,8 +114,10 @@ class InferenceModel(object):
     self.sequence_length = {'inputs': self.inputs_length,
                             'targets': self.outputs_length}
 
-    self.partitioner = t5x.partitioning.PjitPartitioner(
-        num_partitions=1)
+    # Detect device and create appropriate partitioner
+    self.device_platform = self._get_device_platform()
+    print(f"MT3 InferenceModel initializing on device: {self.device_platform}")
+    self.partitioner = self._create_partitioner(self.device_platform)
 
     # Build Codecs and Vocabularies.
     self.spectrogram_config = spectrograms.SpectrogramConfig()
@@ -123,19 +170,30 @@ class InferenceModel(object):
 
   def restore_from_checkpoint(self, checkpoint_path):
     """Restore training state from checkpoint, resets self._predict_fn()."""
-    train_state_initializer = t5x.utils.TrainStateInitializer(
-      optimizer_def=self.model.optimizer_def,
-      init_fn=self.model.get_initial_variables,
-      input_shapes=self.input_shapes,
-      partitioner=self.partitioner)
+    print(f"Restoring checkpoint on {self.device_platform} device...")
+    print(f"Available JAX devices: {jax.devices()}")
 
-    restore_checkpoint_cfg = t5x.utils.RestoreCheckpointConfig(
-        path=checkpoint_path, mode='specific', dtype='float32')
+    try:
+        train_state_initializer = t5x.utils.TrainStateInitializer(
+            optimizer_def=self.model.optimizer_def,
+            init_fn=self.model.get_initial_variables,
+            input_shapes=self.input_shapes,
+            partitioner=self.partitioner)
 
-    train_state_axes = train_state_initializer.train_state_axes
-    self._predict_fn = self._get_predict_fn(train_state_axes)
-    self._train_state = train_state_initializer.from_checkpoint_or_scratch(
-        [restore_checkpoint_cfg], init_rng=jax.random.PRNGKey(0))
+        restore_checkpoint_cfg = t5x.utils.RestoreCheckpointConfig(
+            path=checkpoint_path, mode='specific', dtype='float32')
+
+        train_state_axes = train_state_initializer.train_state_axes
+        self._predict_fn = self._get_predict_fn(train_state_axes)
+        self._train_state = train_state_initializer.from_checkpoint_or_scratch(
+            [restore_checkpoint_cfg], init_rng=jax.random.PRNGKey(0))
+
+        print(f"Successfully restored checkpoint on {self.device_platform}")
+    except Exception as e:
+        print(f"Error during checkpoint restoration: {e}")
+        print(f"Device platform: {self.device_platform}")
+        print(f"Partitioner config: {self.partitioner}")
+        raise
 
   @functools.lru_cache()
   def _get_predict_fn(self, train_state_axes):
