@@ -90,13 +90,17 @@ def transcribe(request):
 
       if IS_ASYNC:
         generate_midi_from_audio.send(audio_midi_id)
+        return JsonResponse({
+            'message':'Queued MIDI generation task. Check status endpoint for updates.',
+            'audio_midi_id': audio_midi_id,
+        })
       else:
         generate_midi_from_audio(audio_midi_id)
+        return JsonResponse({
+            'message':'Completed MIDI generation.',
+            'audio_midi_id ': audio_midi_id,
+        })
 
-      return JsonResponse({
-        'message':'Created MIDI generation task. Check status endpoint for updates.',
-        'audio_midi_id ': audio_midi_id,
-      })
   except KeyError as e:
         # Handle the case where 'audio_id' is not provided
         error_message = f"Missing key in request data: {str(e)}"
