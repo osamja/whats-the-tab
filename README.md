@@ -31,7 +31,7 @@ Design Decisions
 	`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi`
 
 	Development
-	`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python manage.py runserver 0:8008`
+	`cd src/mt3-transcription/musictranscription; source ../venv/bin/activate; python manage.py runserver 0:8008`
 
 * Start tailscale on desktop
 `sudo tailscaled` or `sudo tailscale up`
