@@ -11,6 +11,7 @@ import numpy as np
 # Import our PyTorch implementation
 from pytorch_model import MT3Model, MT3Config
 from pytorch_spectrograms import SpectrogramConfig, audio_to_frames, load_audio
+from download_checkpoint import ensure_checkpoint
 
 
 class StandaloneMT3:
@@ -48,7 +49,9 @@ class StandaloneMT3:
         # Create and load model
         self.model = MT3Model(self.config).to(self.device)
 
-        if checkpoint_path and os.path.exists(checkpoint_path):
+        if checkpoint_path:
+            # Ensure checkpoint exists, downloading if necessary
+            checkpoint_path = str(ensure_checkpoint(checkpoint_path))
             print(f"Loading checkpoint: {checkpoint_path}")
             state_dict = torch.load(checkpoint_path, map_location=self.device)
             missing, unexpected = self.model.load_state_dict(state_dict, strict=False)

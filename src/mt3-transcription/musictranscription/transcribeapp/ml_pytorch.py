@@ -20,6 +20,7 @@ sys.path.insert(0, pytorch_mt3_path)
 
 from pytorch_model import MT3Model, MT3Config
 from pytorch_spectrograms import SpectrogramConfig, audio_to_frames
+from download_checkpoint import ensure_checkpoint
 
 SAMPLE_RATE = 16000
 
@@ -108,8 +109,8 @@ class PyTorchInferenceModel:
                 base_path = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
                 checkpoint_path = os.path.join(base_path, checkpoint_path)
 
-            if not os.path.exists(checkpoint_path):
-                raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+            # Ensure checkpoint exists, downloading if necessary
+            checkpoint_path = str(ensure_checkpoint(checkpoint_path))
 
             state_dict = torch.load(checkpoint_path, map_location=self.device)
 
