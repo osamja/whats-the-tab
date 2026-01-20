@@ -12,14 +12,26 @@ from pytube import YouTube
 import tempfile
 import os
 
-from .ml import split_audio_segments, transcribe_and_download, InferenceModel
+# Import both JAX and PyTorch implementations
+from .ml import split_audio_segments, InferenceModel
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Choose backend: 'pytorch' or 'jax'
+USE_PYTORCH = os.getenv('USE_PYTORCH', 'True').lower() in ('true', '1', 't')
 
 MODEL = "mt3" #@param["ismir2021", "mt3"]
-mt3_path = 'checkpoints'
 
-checkpoint_path = f'{mt3_path}/{MODEL}/'
-
-print(checkpoint_path)
+if USE_PYTORCH:
+    from .ml_pytorch import PyTorchInferenceModel, transcribe_and_download
+    pytorch_checkpoint_path = 'pytorch_mt3/mt3_pytorch_checkpoint.pt'
+    print(f"Using PyTorch backend with checkpoint: {pytorch_checkpoint_path}")
+else:
+    from .ml import transcribe_and_download
+    mt3_path = 'checkpoints'
+    checkpoint_path = f'{mt3_path}/{MODEL}/'
+    print(f"Using JAX backend with checkpoint: {checkpoint_path}")
 
 @dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
 def download_youtube_audio_and_save(audio_midi_id):
@@ -43,7 +55,12 @@ def download_youtube_audio_and_save(audio_midi_id):
 @dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
 def generate_midi_from_audio(audio_midi_id):
   audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
-  inference_model = InferenceModel(checkpoint_path, MODEL)
+
+  # Initialize inference model based on backend
+  if USE_PYTORCH:
+    inference_model = PyTorchInferenceModel(pytorch_checkpoint_path, MODEL)
+  else:
+    inference_model = InferenceModel(checkpoint_path, MODEL)
 
   NUM_TRANSCRIPTION_SEGMENTS = int(audio_midi.num_transcription_segments)
   AUDIO_CHUNK_LENGTH = int(audio_midi.audio_chunk_length) * 1000 # in milliseconds
@@ -51,7 +68,7 @@ def generate_midi_from_audio(audio_midi_id):
   split_audio_segments(audio_midi, AUDIO_CHUNK_LENGTH, NUM_TRANSCRIPTION_SEGMENTS)
 
   split_filenames = getSplitFilenames(audio_midi)
-  
+
   transcribe_and_download(audio_midi, split_filenames, inference_model)
 
   audio_midi.status = 'completed'

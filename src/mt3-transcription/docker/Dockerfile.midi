@@ -1,0 +1,36 @@
+# PyTorch MT3 with MIDI Output Support
+# Audio → MIDI files (no Django)
+
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+WORKDIR /app
+
+# Install system dependencies for audio processing
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for MIDI support
+RUN pip install --no-cache-dir \
+    torch==2.3.0 \
+    torchaudio==2.3.0 \
+    numpy \
+    librosa \
+    note-seq \
+    tensorflow>=2.12 \
+    protobuf<4.0 \
+    seqio \
+    t5>=0.9 \
+    gin-config \
+    mido
+
+# Copy PyTorch implementation and MT3 vocab
+COPY pytorch_mt3/ /app/pytorch_mt3/
+COPY mt3/ /app/mt3/
+
+# Test
+RUN python -c "from pytorch_mt3.standalone_inference import StandaloneMT3; print('✓ MIDI support ready')"
+
+# Entry point for inference
+ENTRYPOINT ["python", "pytorch_mt3/standalone_inference.py"]

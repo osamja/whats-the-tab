@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # Django API with PyTorch MT3
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.django
+    ports:
+      - "8000:8000"
+    environment:
+      - USE_PYTORCH=True
+      - IS_ASYNC=True
+      - POSTGRES_DB=transcription
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - media:/app/media
+      - static:/app/static
+    depends_on:
+      - db
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # Task worker for async processing
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.django
+    command: dramatiq musictranscription.transcribeapp.tasks
+    environment:
+      - USE_PYTORCH=True
+      - POSTGRES_DB=transcription
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST=db
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - media:/app/media
+    depends_on:
+      - db
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # PostgreSQL database
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=transcription
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # Redis for task queue
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+  media:
+  static:
