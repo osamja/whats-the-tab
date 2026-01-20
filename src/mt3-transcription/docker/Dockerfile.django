@@ -1,0 +1,41 @@
+# Full Django API with PyTorch MT3
+# Complete production-ready container
+
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libsndfile1 \
+    ffmpeg \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY pytorch_mt3/ /app/pytorch_mt3/
+COPY mt3/ /app/mt3/
+COPY musictranscription/ /app/musictranscription/
+COPY manage.py /app/
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV USE_PYTORCH=True
+ENV DJANGO_SETTINGS_MODULE=musictranscription.settings
+
+# Collect static files
+RUN python manage.py collectstatic --noinput || true
+
+# Expose Django port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/ || exit 1
+
+# Run Django with gunicorn
+CMD ["gunicorn", "musictranscription.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]

@@ -1,0 +1,20 @@
+# Minimal PyTorch MT3 - Audio to Tokens Only
+# This is the smallest possible container for inference
+
+FROM pytorch/pytorch:2.3.0-cuda12.1-cudnn8-runtime
+
+WORKDIR /app
+
+# Install minimal dependencies
+RUN pip install --no-cache-dir \
+    torchaudio==2.3.0 \
+    numpy
+
+# Copy only PyTorch implementation
+COPY pytorch_mt3/ /app/pytorch_mt3/
+
+# Test that it works
+RUN python -c "from pytorch_mt3 import MT3Model, MT3Config; print('✓ PyTorch MT3 loaded')"
+
+# Default command
+CMD ["python", "pytorch_mt3/standalone_inference.py"]
