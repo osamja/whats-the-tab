@@ -11,8 +11,11 @@ This directory contains the PyTorch implementation of the MT3 model, separated f
 - `__init__.py` - Package initialization
 
 ### Checkpoint & Conversion
-- `mt3_pytorch_checkpoint.pt` - Converted model weights (175 MB)
+- `mt3_pytorch_checkpoint.pt` - Converted model weights (175 MB, auto-downloaded from GitHub Releases)
+- `download_checkpoint.py` - Auto-downloads checkpoint if missing
 - `convert_jax_to_pytorch.py` - Script to convert JAX checkpoints
+
+**Note:** The checkpoint is automatically downloaded on first use. To download manually: `python download_checkpoint.py`
 
 ### Testing & Examples
 - `test_pytorch_mt3.py` - Comprehensive test suite
