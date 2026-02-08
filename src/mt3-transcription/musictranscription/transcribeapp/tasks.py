@@ -50,20 +50,5 @@ def generate_midi_from_audio(audio_midi_id):
     audio_midi.save()
 
 def get_audio_filename(is_mp4=False):
-    fileHash = uuid.uuid4()
-    date = getDate()
-    if is_mp4:
-        audio_filename = date + '-' + fileHash.hex + '.mp4'
-    else:
-        audio_filename = date + '-' + fileHash.hex + '.wav'
-    return audio_filename
-
-def getAudioDirectory():
-    return 'content/audio/'
-
-def getDate():
-    date = str(datetime.datetime.now())
-    date = date.replace(" ", "-")
-    date = date.replace(":", "-")
-    date = date.replace(".", "-")
-    return date
+    ext = '.mp4' if is_mp4 else '.wav'
+    return f"{datetime.datetime.now().isoformat()}-{uuid.uuid4().hex}{ext}"
