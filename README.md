@@ -8,6 +8,32 @@ In the ipython notebook python kernel, paste the url into the open by url option
 
 django app for transcribing music from audio files
 
+## Local setup with uv
+
+```bash
+cd /home/samus/programming-projects/whats-the-tab
+uv sync --frozen --no-dev --no-install-project
+uv run python manage.py migrate
+USE_PYTORCH=True IS_ASYNC=False uv run python manage.py runserver 0.0.0.0:8008
+```
+
+## Run with Docker
+
+Build and run:
+
+```bash
+cd /home/samus/programming-projects/whats-the-tab
+docker compose up --build
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
+The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar container.
+
 go live checklist
 - check @todo and remove anything that is not needed for production
 - validate unicode characters for audio filenames in upload process https://docs.djangoproject.com/en/5.0/ref/validators/#validate-unicode-slug

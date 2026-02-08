@@ -20,10 +20,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-b98rd+t)ps#-7ov^+tiu_%gtri9#(1y0+h^gg0mu(n#8g)gw9#'
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "django-insecure-b98rd+t)ps#-7ov^+tiu_%gtri9#(1y0+h^gg0mu(n#8g)gw9#",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
 
 # Frontend URL for redirects
 FRONTEND_URL = 'https://pyaar.ai'
@@ -117,14 +120,16 @@ REST_FRAMEWORK = {
 import dramatiq
 from dramatiq.brokers.redis import RedisBroker
 
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
 # Set up Redis broker for Dramatiq
-DRAMATIQ_BROKER = RedisBroker(host="localhost", port=6379)
+DRAMATIQ_BROKER = RedisBroker(url=REDIS_URL)
 dramatiq.set_broker(DRAMATIQ_BROKER)
 
 DRAMATIQ_BROKER = {
     "BROKER": "dramatiq.brokers.redis.RedisBroker",
     "OPTIONS": {
-        "url": "redis://localhost:6379",
+        "url": REDIS_URL,
     },
     "MIDDLEWARE": [
         "dramatiq.middleware.AgeLimit",
