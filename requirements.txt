@@ -17,5 +17,6 @@ requests>=2.31,<3
 numpy>=1.26,<3
 torch>=2.3,<3
 torchaudio>=2.3,<3
+torchcodec>=0.10,<0.11
 note-seq>=0.0.5
 pytube>=15,<16
