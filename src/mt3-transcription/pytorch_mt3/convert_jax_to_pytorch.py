@@ -6,6 +6,7 @@ This script converts the zarr-format JAX checkpoint to a PyTorch state_dict.
 import os
 import sys
 import zarr
+import msgpack
 import numpy as np
 import torch
 from pathlib import Path
@@ -48,6 +49,85 @@ def load_zarr_array(zarr_path: str) -> np.ndarray:
             # Read raw data
             data = np.fromfile(data_file, dtype=dtype)
             return data.reshape(shape)
+
+
+def decode_msgpack_exttype(ext: msgpack.ExtType) -> np.ndarray:
+    """Decode a msgpack ExtType containing a numpy array.
+
+    T5X stores small arrays (like LayerNorm scales) as msgpack ExtType objects
+    with format: [shape_list, dtype_string, raw_bytes].
+    """
+    inner = msgpack.unpackb(ext.data, raw=False)
+    shape = tuple(inner[0])
+    dtype = np.dtype(inner[1])
+    data = np.frombuffer(inner[2], dtype=dtype).reshape(shape)
+    return data
+
+
+def extract_scale_params_from_msgpack(
+    checkpoint_path: str,
+) -> Dict[str, np.ndarray]:
+    """Extract RMSNorm scale parameters from the JAX checkpoint msgpack file.
+
+    These small parameters are embedded in the msgpack metadata file rather
+    than stored as zarr directories.
+    """
+    msgpack_path = os.path.join(checkpoint_path, 'checkpoint')
+    with open(msgpack_path, 'rb') as f:
+        data = msgpack.unpack(f, raw=False)
+
+    target = data['optimizer']['target']
+    scales = {}
+
+    def find_scales(d, prefix=''):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                path = f'{prefix}.{k}' if prefix else k
+                find_scales(v, path)
+        elif isinstance(d, msgpack.ExtType):
+            if prefix.endswith('.scale'):
+                scales[prefix] = decode_msgpack_exttype(d)
+
+    find_scales(target)
+    return scales
+
+
+def map_scale_name_to_pytorch(jax_name: str) -> str:
+    """Map JAX scale parameter name to PyTorch T5RMSNorm weight name."""
+    # encoder.encoder_norm.scale -> encoder.final_norm.weight
+    if jax_name == 'encoder.encoder_norm.scale':
+        return 'encoder.final_norm.weight'
+
+    # decoder.decoder_norm.scale -> decoder.final_norm.weight
+    if jax_name == 'decoder.decoder_norm.scale':
+        return 'decoder.final_norm.weight'
+
+    # Encoder layer norms
+    # encoder.layers_N.pre_attention_layer_norm.scale -> encoder.layers.N.norm1.weight
+    # encoder.layers_N.pre_mlp_layer_norm.scale -> encoder.layers.N.norm2.weight
+    if jax_name.startswith('encoder.layers_'):
+        parts = jax_name.split('.')
+        layer_num = parts[1].split('_')[1]
+        if 'pre_attention_layer_norm' in jax_name:
+            return f'encoder.layers.{layer_num}.norm1.weight'
+        elif 'pre_mlp_layer_norm' in jax_name:
+            return f'encoder.layers.{layer_num}.norm2.weight'
+
+    # Decoder layer norms
+    # decoder.layers_N.pre_self_attention_layer_norm.scale -> decoder.layers.N.norm1.weight
+    # decoder.layers_N.pre_cross_attention_layer_norm.scale -> decoder.layers.N.norm2.weight
+    # decoder.layers_N.pre_mlp_layer_norm.scale -> decoder.layers.N.norm3.weight
+    if jax_name.startswith('decoder.layers_'):
+        parts = jax_name.split('.')
+        layer_num = parts[1].split('_')[1]
+        if 'pre_self_attention_layer_norm' in jax_name:
+            return f'decoder.layers.{layer_num}.norm1.weight'
+        elif 'pre_cross_attention_layer_norm' in jax_name:
+            return f'decoder.layers.{layer_num}.norm2.weight'
+        elif 'pre_mlp_layer_norm' in jax_name:
+            return f'decoder.layers.{layer_num}.norm3.weight'
+
+    raise ValueError(f"Unknown scale parameter: {jax_name}")
 
 
 def map_jax_to_pytorch_name(jax_name: str) -> Tuple[str, bool]:
@@ -215,6 +295,26 @@ def convert_checkpoint(
             conversion_stats['errors'] += 1
             print(f"✗ {jax_param_name:70s} ERROR: {e}")
 
+    # Extract RMSNorm scale params from msgpack
+    if verbose:
+        print("\nExtracting RMSNorm scale parameters from msgpack...")
+
+    scale_params = extract_scale_params_from_msgpack(str(checkpoint_path))
+    for jax_scale_name, scale_array in sorted(scale_params.items()):
+        conversion_stats['total'] += 1
+        try:
+            pytorch_name = map_scale_name_to_pytorch(jax_scale_name)
+            pytorch_tensor = torch.from_numpy(scale_array.copy())
+            state_dict[pytorch_name] = pytorch_tensor
+            conversion_stats['converted'] += 1
+
+            if verbose:
+                print(f"✓ {jax_scale_name:70s} -> {pytorch_name:50s} {list(scale_array.shape)}")
+
+        except Exception as e:
+            conversion_stats['errors'] += 1
+            print(f"✗ {jax_scale_name:70s} ERROR: {e}")
+
     if verbose:
         print()
         print("=" * 100)
@@ -256,8 +356,10 @@ def verify_conversion(
     # Expected parameter groups
     expected_groups = {
         'encoder.input_projection': 1,
+        'encoder.final_norm': 1,
         'encoder.layers': 8,  # 8 encoder layers
         'decoder.token_embeddings': 1,
+        'decoder.final_norm': 1,
         'decoder.layers': 8,  # 8 decoder layers
         'decoder.output_projection': 1,
     }
@@ -278,12 +380,12 @@ def verify_conversion(
 
         if 'layers' in group:
             # For layers, we expect multiple parameters per layer
-            # Each encoder layer has 7 params (4 attention + 3 mlp)
-            # Each decoder layer has 11 params (4 self_attn + 4 cross_attn + 3 mlp)
+            # Each encoder layer has 9 params (4 attention + 3 mlp + 2 norm)
+            # Each decoder layer has 14 params (4 self_attn + 4 cross_attn + 3 mlp + 3 norm)
             if 'encoder' in group:
-                expected_total = 8 * 7  # 56
+                expected_total = 8 * 9  # 72
             else:
-                expected_total = 8 * 11  # 88
+                expected_total = 8 * 14  # 112
 
             if actual_count == expected_total:
                 status = "✓"

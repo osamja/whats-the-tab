@@ -180,14 +180,17 @@ class StandaloneMT3:
 
         This requires note-seq and MT3 vocabulary to be available.
         """
-        # Import MT3 modules (may fail if dependencies not available)
-        from mt3 import vocabularies, metrics_utils, note_sequences
+        # Import vendored MT3 decoding modules (no TF/seqio/t5 needed)
+        from mt3_decoding import vocabularies, metrics_utils, note_sequences
 
         # Build codec and vocabulary
         codec = vocabularies.build_codec(
             vocab_config=vocabularies.VocabularyConfig(num_velocity_bins=1)
         )
         encoding_spec = note_sequences.NoteEncodingWithTiesSpec
+
+        # Build vocabulary to convert model tokens to codec indices
+        vocab = vocabularies.vocabulary_from_codec(codec)
 
         # Create predictions in MT3 format
         predictions = []
@@ -196,6 +199,11 @@ class StandaloneMT3:
             tokens = np.array(tokens, np.int32)
             if vocabularies.DECODED_EOS_ID in tokens:
                 tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
+
+            # Convert from model vocabulary space to codec indices
+            # vocab.decode handles special tokens (PAD/EOS/UNK -> DECODED_INVALID_ID)
+            # and subtracts the special token offset for regular tokens
+            tokens = np.array(vocab.decode(tokens), np.int32)
 
             # Round start time
             start_time -= start_time % (1 / codec.steps_per_second)
