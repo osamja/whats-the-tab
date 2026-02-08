@@ -12,6 +12,24 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+class T5RMSNorm(nn.Module):
+    """T5-style RMS normalization (no mean subtraction, no bias, scale only).
+
+    Matches JAX T5 LayerNorm: y = x * rsqrt(mean(x^2) + eps) * scale
+    """
+    def __init__(self, hidden_size: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        input_dtype = x.dtype
+        x = x.float()
+        mean2 = x.pow(2).mean(-1, keepdim=True)
+        x = x * torch.rsqrt(mean2 + self.eps)
+        return (self.weight * x).to(input_dtype)
+
+
 class MT3Config:
     """Configuration for MT3 model.
 
@@ -47,34 +65,29 @@ class MT3Config:
 class FixedPositionalEncoding(nn.Module):
     """Fixed sinusoidal positional encoding.
 
-    Matches the JAX implementation's FixedEmbed layer.
+    Matches the JAX T5 sinusoidal() initializer exactly:
+    - scale_factor = -log(max_scale/min_scale) / (features//2 - 1)
+    - div_term = min_scale * exp(arange(features//2) * scale_factor)
+    - sin in first half of features, cos in second half
     """
-    def __init__(self, emb_dim: int, max_len: int = 5000):
+    def __init__(self, emb_dim: int, max_len: int = 5000,
+                 min_scale: float = 1.0, max_scale: float = 10000.0):
         super().__init__()
         self.emb_dim = emb_dim
 
-        # Create positional encoding matrix
-        position = torch.arange(max_len).unsqueeze(1).float()
-        div_term = torch.exp(
-            torch.arange(0, emb_dim // 2) * (-math.log(10000.0) / (emb_dim // 2))
-        )
-
         pe = torch.zeros(max_len, emb_dim)
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
+        position = torch.arange(max_len).unsqueeze(1).float()
 
-        # Register as buffer (not a parameter, but part of state)
+        half_dim = emb_dim // 2
+        scale_factor = -math.log(max_scale / min_scale) / (half_dim - 1)
+        div_term = min_scale * torch.exp(torch.arange(half_dim).float() * scale_factor)
+
+        pe[:, :half_dim] = torch.sin(position * div_term)
+        pe[:, half_dim:2 * half_dim] = torch.cos(position * div_term)
+
         self.register_buffer('pe', pe.unsqueeze(0))  # [1, max_len, emb_dim]
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Add positional encoding to input.
-
-        Args:
-            x: Input tensor [batch, seq_len, emb_dim]
-
-        Returns:
-            Tensor with positional encoding added
-        """
         seq_len = x.size(1)
         return x + self.pe[:, :seq_len, :]
 
@@ -105,7 +118,6 @@ class MultiHeadAttention(nn.Module):
         self.out_proj = nn.Linear(num_heads * head_dim, emb_dim, bias=False)
 
         self.dropout = nn.Dropout(dropout_rate)
-        self.scale = head_dim ** -0.5
 
     def forward(
         self,
@@ -132,7 +144,9 @@ class MultiHeadAttention(nn.Module):
         v = self.v_proj(value).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         # Attention scores: [batch, num_heads, seq_len_q, seq_len_k]
-        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+        # Note: no explicit 1/sqrt(d) scaling - JAX T5 bakes this into the
+        # query weight initialization, so trained weights already include it.
+        scores = torch.matmul(q, k.transpose(-2, -1))
 
         # Apply mask if provided
         if attention_mask is not None:
@@ -200,8 +214,8 @@ class EncoderLayer(nn.Module):
         )
         self.mlp = GatedMLP(config.emb_dim, config.mlp_dim, config.dropout_rate)
 
-        self.norm1 = nn.LayerNorm(config.emb_dim)
-        self.norm2 = nn.LayerNorm(config.emb_dim)
+        self.norm1 = T5RMSNorm(config.emb_dim)
+        self.norm2 = T5RMSNorm(config.emb_dim)
 
         self.dropout1 = nn.Dropout(config.dropout_rate)
         self.dropout2 = nn.Dropout(config.dropout_rate)
@@ -263,9 +277,9 @@ class DecoderLayer(nn.Module):
         )
         self.mlp = GatedMLP(config.emb_dim, config.mlp_dim, config.dropout_rate)
 
-        self.norm1 = nn.LayerNorm(config.emb_dim)
-        self.norm2 = nn.LayerNorm(config.emb_dim)
-        self.norm3 = nn.LayerNorm(config.emb_dim)
+        self.norm1 = T5RMSNorm(config.emb_dim)
+        self.norm2 = T5RMSNorm(config.emb_dim)
+        self.norm3 = T5RMSNorm(config.emb_dim)
 
         self.dropout1 = nn.Dropout(config.dropout_rate)
         self.dropout2 = nn.Dropout(config.dropout_rate)
@@ -331,7 +345,7 @@ class MT3Encoder(nn.Module):
         ])
 
         # Final layer norm
-        self.final_norm = nn.LayerNorm(config.emb_dim)
+        self.final_norm = T5RMSNorm(config.emb_dim)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -384,7 +398,7 @@ class MT3Decoder(nn.Module):
         ])
 
         # Final layer norm
-        self.final_norm = nn.LayerNorm(config.emb_dim)
+        self.final_norm = T5RMSNorm(config.emb_dim)
 
         # Output projection to vocabulary
         self.output_projection = nn.Linear(config.emb_dim, config.vocab_size, bias=False)
