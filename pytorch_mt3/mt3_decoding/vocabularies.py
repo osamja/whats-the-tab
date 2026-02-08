@@ -18,7 +18,7 @@ import dataclasses
 import math
 
 from typing import Callable, Optional, Sequence
-from mt3_decoding import event_codec
+from . import event_codec
 
 import note_seq
 import numpy as np

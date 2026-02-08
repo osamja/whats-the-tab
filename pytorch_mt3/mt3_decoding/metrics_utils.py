@@ -19,9 +19,9 @@ import functools
 
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, TypeVar
 
-from mt3_decoding import event_codec
-from mt3_decoding import note_sequences
-from mt3_decoding import run_length_encoding
+from . import event_codec
+from . import note_sequences
+from . import run_length_encoding
 
 import note_seq
 import numpy as np

@@ -141,27 +141,19 @@ dmypy.json
 
 # ignore the mt3 directory
 mt3/
-# ignore the musictranscription/audios/ directory
-src/mt3-transcription/musictranscription/audios/
+# Django/generated media and local assets
+audios/
+content/
+midis/
+audio_chunks/
+midi_chunks/
+midi_2_wav/
+static/
+midi/
 
-src/mt3-transcription/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
-src/mt3-transcription/musictranscription/SGM-v2.01-Sal-Guit-Bass-V1.3.sf2
-src/mt3-transcription/musictranscription/acoustic_guitar_only.midi
-src/mt3-transcription/musictranscription/content/
-src/mt3-transcription/musictranscription/midis/
-src/mt3-transcription/content/*
-src/mt3-transcription/checkpoints/*
-src/mt3-transcription/cuda-repo-wsl-ubuntu-12-4-local_12.4.1-1_amd64.deb
+# Local soundfont/checkpoints artifacts
+SGM-v2.01-*.sf2
 
-src/mt3-transcription/3_Why_Georgia.mp3
 dataset/
 
 env_vars.sh
-src/mt3-transcription/acoustic_guitar_only.midi
-src/mt3-transcription/musictranscription/audio_chunks/
-src/mt3-transcription/musictranscription/checkpoints/
-src/mt3-transcription/musictranscription/midi_2_wav/
-src/mt3-transcription/myenv
-src/mt3-transcription/output.wav
-src/mt3-transcription/musictranscription/midi_chunks/
-src/mt3-transcription/musictranscription/static/
