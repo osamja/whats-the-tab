@@ -12,7 +12,7 @@
             "name": "Django: Debug Server",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/mt3-transcription/musictranscription/manage.py",
+            "program": "${workspaceFolder}/manage.py",
             "args": [
                 "runserver",
                 "127.0.0.1:8008"
@@ -20,8 +20,8 @@
             "django": true,
             "justMyCode": false,
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/src/mt3-transcription/musictranscription",
-            "python": "${workspaceFolder}/src/mt3-transcription/venv/bin/python",
+            "cwd": "${workspaceFolder}",
+            "python": "${workspaceFolder}/venv/bin/python",
             "env": {
                 "PYTHONUNBUFFERED": "1",
                 "IS_ASYNC": "False"
