@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Django: Debug Server (PyTorch)",
+            "name": "Django: Debug Server",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/manage.py",
@@ -16,27 +16,6 @@
             "python": "${workspaceFolder}/../venv/bin/python",
             "env": {
                 "PYTHONUNBUFFERED": "1",
-                "USE_PYTORCH": "True",
-                "IS_ASYNC": "False"
-            },
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Django: Debug Server (JAX)",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/manage.py",
-            "args": [
-                "runserver",
-                "127.0.0.1:8008"
-            ],
-            "django": true,
-            "justMyCode": false,
-            "console": "integratedTerminal",
-            "python": "${workspaceFolder}/../venv/bin/python",
-            "env": {
-                "PYTHONUNBUFFERED": "1",
-                "USE_PYTORCH": "False",
                 "IS_ASYNC": "False"
             },
             "cwd": "${workspaceFolder}"
