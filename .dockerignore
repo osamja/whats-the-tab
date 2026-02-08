@@ -15,3 +15,5 @@ midi/
 *.ipynb
 .ipynb_checkpoints/
 .vscode/
+.env
+musictranscription/.env

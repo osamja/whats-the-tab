@@ -62,7 +62,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'transcribeapp',
     'django_cleanup.apps.CleanupConfig',
-    'django_dramatiq',
+    *(['django_dramatiq'] if os.getenv('IS_ASYNC', 'False').lower() in ('true', '1', 't') else []),
     'corsheaders',
     'allauth',
     'allauth.account',
@@ -117,28 +117,32 @@ REST_FRAMEWORK = {
     ),
 }
  
-import dramatiq
-from dramatiq.brokers.redis import RedisBroker
+IS_ASYNC_SETTING = os.getenv('IS_ASYNC', 'False').lower() in ('true', '1', 't')
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+if IS_ASYNC_SETTING:
+    import dramatiq
+    from dramatiq.brokers.redis import RedisBroker
 
-# Set up Redis broker for Dramatiq
-DRAMATIQ_BROKER = RedisBroker(url=REDIS_URL)
-dramatiq.set_broker(DRAMATIQ_BROKER)
+    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-DRAMATIQ_BROKER = {
-    "BROKER": "dramatiq.brokers.redis.RedisBroker",
-    "OPTIONS": {
-        "url": REDIS_URL,
-    },
-    "MIDDLEWARE": [
-        "dramatiq.middleware.AgeLimit",
-        "dramatiq.middleware.TimeLimit",
-        "dramatiq.middleware.Callbacks",
-        "dramatiq.middleware.Retries",
-        "django_dramatiq.middleware.DbConnectionsMiddleware",
-    ]
-}
+    DRAMATIQ_BROKER = {
+        "BROKER": "dramatiq.brokers.redis.RedisBroker",
+        "OPTIONS": {
+            "url": REDIS_URL,
+        },
+        "MIDDLEWARE": [
+            "dramatiq.middleware.AgeLimit",
+            "dramatiq.middleware.TimeLimit",
+            "dramatiq.middleware.Callbacks",
+            "dramatiq.middleware.Retries",
+            "django_dramatiq.middleware.DbConnectionsMiddleware",
+        ]
+    }
+else:
+    import dramatiq
+    from dramatiq.brokers.stub import StubBroker
+
+    dramatiq.set_broker(StubBroker())
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
