@@ -26,9 +26,8 @@ from mt3 import vocabularies
 
 import matplotlib.pyplot as plt
 from mido import MidiFile, MidiTrack
-from pydub import AudioSegment
 
-from .models import AudioMIDI, AudioChunk, MIDIChunk
+from .models import AudioMIDI, MIDIChunk
 import dramatiq
 import io
 from django.core.files import File
@@ -306,60 +305,8 @@ class InferenceModel(object):
       tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
     return tokens
 
-def split_audio_segments(audio_midi, chunk_length_ms=2000, num_chunks=5):
-    """Split the audio file into segments of chunk_length_ms and save them as AudioChunk objects."""
-    audio = audio_midi.audio_file
-
-    # if audio is mp3, load the mp3 file
-    if audio.name.endswith('.mp3'):
-      audio = AudioSegment.from_mp3(audio.path)
-    elif audio.name.endswith('.wav'):
-      audio = AudioSegment.from_wav(audio.path)
-    elif audio.name.endswith('.mp4'):
-      audio = AudioSegment.from_file(audio.path, format='mp4')
-    split_filenames = []
-
-    # Length of the audio in milliseconds
-    length_ms = len(audio)
-
-    # Start and end points for slicing
-    start_ms = 0
-    end_ms = chunk_length_ms
-
-    file_counter = 0
-
-    tmp_chunk_names = []
-
-    # Delete existing chunks
-    AudioChunk.objects.filter(audio_midi=audio_midi).delete()
-
-    while start_ms < length_ms and file_counter < num_chunks:
-        # Extract the chunk
-        chunk = audio[start_ms:end_ms]
-        # Save the chunk as a separate file
-        chunk_name = f"{audio_midi.id}-{file_counter}.wav"
-        chunk.export(chunk_name, format="wav")
-        tmp_chunk_names.append(chunk_name)
-
-        # Create a file-like object from the chunk data
-        with open(chunk_name, 'rb') as chunk_file:
-            chunk_file_obj = File(chunk_file)
-
-            # Create AudioChunk object
-            audio_chunk = AudioChunk.objects.create(
-                audio_midi=audio_midi,
-                chunk_file=chunk_file_obj,
-                segment_index=file_counter
-            )
-
-        # Move to the next chunk
-        start_ms = end_ms
-        end_ms += chunk_length_ms
-        file_counter += 1
-
-    # delete the temporary chunk files
-    for chunk_name in tmp_chunk_names:
-        os.remove(chunk_name)
+# Note: split_audio_segments has been moved to audio_utils.py
+# Import it from there: from .audio_utils import split_audio_segments
 
 def transcribe_audio(audio, inference_model, play=False):
   est_ns = inference_model(audio)

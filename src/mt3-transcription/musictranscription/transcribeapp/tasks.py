@@ -13,7 +13,8 @@ import tempfile
 import os
 
 # Import both JAX and PyTorch implementations
-from .ml import split_audio_segments, InferenceModel
+from .ml import InferenceModel
+from .audio_utils import split_audio_segments
 from dotenv import load_dotenv
 
 load_dotenv()
