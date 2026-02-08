@@ -1,17 +1,9 @@
-from django.shortcuts import render
 from django.http import JsonResponse, FileResponse, Http404
 from django.views.decorators.csrf import csrf_exempt
-from django.core.files.storage import FileSystemStorage
 import uuid
-from .tasks import get_audio_filename, getAudioDirectory, generate_midi_from_audio, download_youtube_audio_and_save
+from .tasks import get_audio_filename, generate_midi_from_audio, download_youtube_audio_and_save
 from .models import AudioMIDI
 import os
-import io
-from django.core.files import File
-import base64
-
-import dramatiq
-from django.core.files.base import ContentFile
 
 from dotenv import load_dotenv
 
