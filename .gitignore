@@ -136,6 +136,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# PyTorch model checkpoints (large binary files, host externally)
+*.pt
+
 # ignore the mt3 directory
 mt3/
 # ignore the musictranscription/audios/ directory
