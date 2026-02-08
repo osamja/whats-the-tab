@@ -24,7 +24,7 @@ import dataclasses
 import logging
 from typing import Any, Callable, Optional, Sequence, Tuple, TypeVar
 
-from mt3_decoding import event_codec
+from . import event_codec
 
 import numpy as np
 

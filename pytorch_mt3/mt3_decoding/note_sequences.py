@@ -19,9 +19,9 @@ import itertools
 
 from typing import MutableMapping, MutableSet, Optional, Sequence, Tuple
 
-from mt3_decoding import event_codec
-from mt3_decoding import run_length_encoding
-from mt3_decoding import vocabularies
+from . import event_codec
+from . import run_length_encoding
+from . import vocabularies
 
 import note_seq
 

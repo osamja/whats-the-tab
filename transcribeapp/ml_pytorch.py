@@ -10,7 +10,7 @@ import note_seq
 
 # Import PyTorch MT3 implementation from sibling directory.
 pytorch_mt3_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+    os.path.dirname(os.path.dirname(__file__)),
     "pytorch_mt3",
 )
 sys.path.insert(0, pytorch_mt3_path)
@@ -57,8 +57,8 @@ class PyTorchInferenceModel:
         if os.path.exists(checkpoint_path):
             return checkpoint_path
 
-        # Project root is src/mt3-transcription from this file location.
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        # Project root is the repository root from this file location.
+        project_root = os.path.dirname(os.path.dirname(__file__))
         candidate = os.path.join(project_root, checkpoint_path)
         if os.path.exists(candidate):
             return candidate

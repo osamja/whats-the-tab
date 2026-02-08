@@ -28,10 +28,10 @@ Design Decisions
 * Start django server
 
 	Production
-	`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi`
+	`cd /home/sammy/workspace/whats-the-tab; source venv/bin/activate; gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi`
 
 	Development
-	`cd src/mt3-transcription/musictranscription; source ../venv/bin/activate; python manage.py runserver 0:8008`
+	`cd /home/sammy/workspace/whats-the-tab; source venv/bin/activate; python manage.py runserver 0:8008`
 
 * Start tailscale on desktop
 `sudo tailscaled` or `sudo tailscale up`
@@ -40,52 +40,44 @@ Design Decisions
 `redis-server`
 
 * Start dramatiq task processor
-`cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription; source ../venv/bin/activate; python run_dramatiq.py transcribeapp.tasks`
+`cd /home/sammy/workspace/whats-the-tab; source venv/bin/activate; python run_dramatiq.py transcribeapp.tasks`
 
 # Setup new desktop
 * Clone repo
 * Copy soundfont file from google drive
-* open index.ipynb and run the commands from the Setup Environment cell in the beginning of the notebook
+* open `docs/index.ipynb` and run the commands from the Setup Environment cell in the beginning of the notebook
 
 # Troubleshooting
 * Shell into django server 
 ```
-cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription
-source ../venv/bin/activate
+cd /home/sammy/workspace/whats-the-tab
+source venv/bin/activate
 python manage.py shell
 ```
 
 # Django transcription backends
-The transcription app supports both regular MT3 (JAX/T5X) and PyTorch MT3.
+The transcription app runs on the PyTorch MT3 backend.
 
 Backend selection is controlled by `USE_PYTORCH`:
 - `USE_PYTORCH=True` uses `transcribeapp/ml_pytorch.py`
-- `USE_PYTORCH=False` uses `transcribeapp/ml.py`
 
 Recommended local development (sync mode for easier debugging):
 ```bash
-cd src/mt3-transcription/musictranscription
-source ../venv/bin/activate
+cd /home/sammy/workspace/whats-the-tab
+source venv/bin/activate
 USE_PYTORCH=True IS_ASYNC=False python manage.py runserver 127.0.0.1:8008
-```
-
-Switch to regular MT3:
-```bash
-cd src/mt3-transcription/musictranscription
-source ../venv/bin/activate
-USE_PYTORCH=False IS_ASYNC=False python manage.py runserver 127.0.0.1:8008
 ```
 
 # PyTorch checkpoint notes
 PyTorch checkpoint is expected at:
-`src/mt3-transcription/pytorch_mt3/mt3_pytorch_checkpoint.pt`
+`pytorch_mt3/mt3_pytorch_checkpoint.pt`
 
 `PyTorchInferenceModel` resolves relative checkpoint paths against the project root, so
 `pytorch_mt3/mt3_pytorch_checkpoint.pt` is valid when running Django from
-`src/mt3-transcription/musictranscription`.
+the repository root.
 
 # API smoke test
-Run server first (PyTorch or JAX mode), then:
+Run server first, then:
 
 ```bash
 # 1) Upload audio

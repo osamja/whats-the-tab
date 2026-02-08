@@ -8,10 +8,10 @@ import sys
 import torch
 import numpy as np
 
-# Import our PyTorch implementation
-from pytorch_model import MT3Model, MT3Config
-from pytorch_spectrograms import SpectrogramConfig, audio_to_frames, load_audio
-from download_checkpoint import ensure_checkpoint
+# Import our PyTorch implementation.
+from .pytorch_model import MT3Model, MT3Config
+from .pytorch_spectrograms import SpectrogramConfig, audio_to_frames, load_audio
+from .download_checkpoint import ensure_checkpoint
 
 
 class StandaloneMT3:
@@ -197,8 +197,8 @@ class StandaloneMT3:
 
         This requires note-seq and MT3 vocabulary to be available.
         """
-        # Import vendored MT3 decoding modules (no TF/seqio/t5 needed)
-        from mt3_decoding import vocabularies, metrics_utils, note_sequences
+        # Import vendored MT3 decoding modules (no TF/seqio/t5 needed).
+        from .mt3_decoding import vocabularies, metrics_utils, note_sequences
 
         # Build codec and vocabulary
         codec = vocabularies.build_codec(
