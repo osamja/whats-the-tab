@@ -1,0 +1,25 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whats-the-tab-web
+    command: sh -c "uv run python manage.py migrate && uv run gunicorn --bind 0.0.0.0:8008 musictranscription.wsgi"
+    ports:
+      - "8008:8008"
+    environment:
+      REDIS_URL: redis://redis:6379
+      DEBUG: "False"
+      USE_PYTORCH: "True"
+      IS_ASYNC: "False"
+    depends_on:
+      - redis
+    volumes:
+      - ./audios:/app/audios
+      - ./midi:/app/midi
+
+  redis:
+    image: redis:7-alpine
+    container_name: whats-the-tab-redis
+    ports:
+      - "6379:6379"
