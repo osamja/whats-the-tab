@@ -151,6 +151,7 @@ class StandaloneMT3:
 
             # Convert to list
             tokens = tokens.squeeze(0).cpu().tolist()
+            tokens = self._trim_generated_prefix(tokens)
 
             # Record chunk
             start_time = chunk_times[0].item() if len(chunk_times) > 0 else 0.0
@@ -174,6 +175,22 @@ class StandaloneMT3:
             'num_chunks': num_chunks,
             'note_sequence': note_sequence,
         }
+
+    @staticmethod
+    def _trim_generated_prefix(tokens):
+        """Drop leading generation-only special tokens.
+
+        MT3 training/inference paths operate in decoded vocabulary space and do
+        not include decoder start/PAD tokens as musical events.
+        """
+        if not tokens:
+            return tokens
+
+        # Generated sequences can begin with repeated decoder start/pad ids (0).
+        idx = 0
+        while idx < len(tokens) and tokens[idx] == 0:
+            idx += 1
+        return tokens[idx:]
 
     def _decode_to_note_sequence(self, token_chunks, start_times):
         """Decode tokens to note sequence using MT3 vocabulary.
@@ -204,6 +221,15 @@ class StandaloneMT3:
             # vocab.decode handles special tokens (PAD/EOS/UNK -> DECODED_INVALID_ID)
             # and subtracts the special token offset for regular tokens
             tokens = np.array(vocab.decode(tokens), np.int32)
+
+            # Regular MT3 decode path does not emit a leading invalid special
+            # token. Drop any leading decoded invalid markers for parity.
+            if tokens.size:
+                first_valid = np.argmax(tokens >= 0)
+                if tokens[first_valid] >= 0:
+                    tokens = tokens[first_valid:]
+                else:
+                    tokens = np.array([], np.int32)
 
             # Round start time
             start_time -= start_time % (1 / codec.steps_per_second)

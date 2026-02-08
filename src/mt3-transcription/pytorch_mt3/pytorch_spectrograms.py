@@ -23,12 +23,14 @@ class SpectrogramConfig:
         num_mel_bins: int = 512,
         fft_size: int = 2048,
         mel_lo_hz: float = 20.0,
+        mel_hi_hz: float = 7600.0,
     ):
         self.sample_rate = sample_rate
         self.hop_width = hop_width
         self.num_mel_bins = num_mel_bins
         self.fft_size = fft_size
         self.mel_lo_hz = mel_lo_hz
+        self.mel_hi_hz = mel_hi_hz
 
     @property
     def frames_per_second(self) -> float:
@@ -63,9 +65,11 @@ class SpectrogramExtractor(torch.nn.Module):
             win_length=config.fft_size,
             n_mels=config.num_mel_bins,
             f_min=config.mel_lo_hz,
-            f_max=config.sample_rate / 2,
-            power=2.0,  # Power spectrogram
+            # MT3 uses spectral_ops.compute_mag + linear_to_mel(..., hi_hz=7600.0).
+            f_max=config.mel_hi_hz,
+            power=1.0,  # Magnitude spectrogram (not power)
             normalized=False,
+            center=False,  # Match tf.signal.stft behavior in MT3
         )
 
     def __call__(
@@ -93,8 +97,8 @@ class SpectrogramExtractor(torch.nn.Module):
         # Output shape: [batch, n_mels, time]
         mel_spec = self.mel_spectrogram(audio)
 
-        # Convert to log scale (add small epsilon to avoid log(0))
-        log_mel_spec = torch.log(mel_spec + 1e-6)
+        # MT3 safe_log uses eps=1e-5 and clipping at zero before log.
+        log_mel_spec = torch.log(torch.clamp(mel_spec, min=1e-5))
 
         # Transpose to [batch, time, freq] to match MT3 convention
         log_mel_spec = log_mel_spec.transpose(1, 2)
