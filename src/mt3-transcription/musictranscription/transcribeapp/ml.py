@@ -27,11 +27,6 @@ from mt3 import vocabularies
 import matplotlib.pyplot as plt
 from mido import MidiFile, MidiTrack
 
-from .models import AudioMIDI, MIDIChunk
-import dramatiq
-import io
-from django.core.files import File
-
 from midi2audio import FluidSynth
 
 SAMPLE_RATE = 16000
@@ -304,45 +299,4 @@ class InferenceModel(object):
     if vocabularies.DECODED_EOS_ID in tokens:
       tokens = tokens[:np.argmax(tokens == vocabularies.DECODED_EOS_ID)]
     return tokens
-
-# Note: split_audio_segments has been moved to audio_utils.py
-# Import it from there: from .audio_utils import split_audio_segments
-
-def transcribe_audio(audio, inference_model, play=False):
-  est_ns = inference_model(audio)
-
-  if play:
-    note_seq.play_sequence(est_ns, synth=note_seq.fluidsynth,
-                           sample_rate=SAMPLE_RATE, sf2_path=SF2_PATH)
-
-  return est_ns
-
-def download_midi(est_ns, download_path='transcription.midi'):
-  note_seq.sequence_proto_to_midi_file(est_ns, download_path)
-
-def transcribe_and_download(audio_midi, split_filenames, inference_model):
-    # Delete existing midi chunks
-    MIDIChunk.objects.filter(audio_midi=audio_midi).delete()
-
-    for i, audio_filename in enumerate(split_filenames):
-        audio, sr = librosa.load(audio_filename, sr=SAMPLE_RATE, mono=True)
-        est_ns = transcribe_audio(audio, inference_model)
-
-        # Create a MIDI file name
-        midi_filename = 'midi_chunks/' + audio_filename.rsplit('/', 1)[1].rsplit('.', 1)[0] + '.midi'
-        download_midi(est_ns, midi_filename)
-
-        # Save the MIDI file to a new MIDIChunk instance
-        with open(midi_filename, 'rb') as midi_file:
-            midi_chunk = MIDIChunk(
-                audio_midi=audio_midi,
-                midi_file=File(midi_file, name=os.path.basename(midi_filename)),
-                segment_index=i
-            )
-            midi_chunk.save()
-
-        # Update current segment
-        audio_midi.current_segment = i + 1
-        audio_midi.save()
-
 

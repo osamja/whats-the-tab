@@ -4,18 +4,15 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.files.storage import FileSystemStorage
 import uuid
 from .tasks import get_audio_filename, getAudioDirectory, generate_midi_from_audio, download_youtube_audio_and_save
-from .models import AudioMIDI, MIDIChunk
-import pdb
+from .models import AudioMIDI
 import os
 import io
 from django.core.files import File
 import base64
 
-
 import dramatiq
 from django.core.files.base import ContentFile
 
-import subprocess
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -32,16 +29,15 @@ def upload_audio(request):
       audio_file=audio_file,
       audio_filename=audio_filename
     )
-    
+
     id = audio_midi.id
 
-    # audio_midi = AudioMIDI.objects.create(audio_file=audio_file)
     return JsonResponse({
       'message': 'File uploaded successfully!',
       'audio_filename': audio_filename,
       'audio_midi_id': id,
     })
-  
+
   return JsonResponse({'error': 'Failed to upload file'}, status=400)
 
 @csrf_exempt
@@ -77,14 +73,8 @@ def transcribe(request):
   try:
     if request.method == 'POST':
       audio_midi_id = request.POST['audio_midi_id']
-      
-      num_transcription_segments = request.POST.get('num_transcription_segments', 1)
-      audio_chunk_length = request.POST.get('audio_chunk_length', 30)
       audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
-      # set audio midi object fields
-      audio_midi.num_transcription_segments = int(num_transcription_segments)
-      audio_midi.audio_chunk_length = int(audio_chunk_length)
       audio_midi.status = 'processing'
       audio_midi.save()
 
@@ -98,19 +88,13 @@ def transcribe(request):
         generate_midi_from_audio(audio_midi_id)
         return JsonResponse({
             'message':'Completed MIDI generation.',
-            'audio_midi_id ': audio_midi_id,
+            'audio_midi_id': audio_midi_id,
         })
 
   except KeyError as e:
-        # Handle the case where 'audio_id' is not provided
         error_message = f"Missing key in request data: {str(e)}"
-        # audio_midi.status = 'failed: ' + str(e)
-        # audio_midi.save()
-        return JsonResponse({'error': error_message}, status=400) 
+        return JsonResponse({'error': error_message}, status=400)
   except Exception as e:
-        # audio_midi.status = 'failed: ' + str(e)
-        # audio_midi.save()
-        # General exception handler for any other unanticipated exceptions
         import traceback
         traceback.print_exc()
         return JsonResponse({'error': 'Internal server error', 'details': str(e)}, status=500)
@@ -122,12 +106,10 @@ def audio_status(request, audio_midi_id):
         response_data = {
             'audio_midi_id': audio_midi.id,
             'audio_filename': audio_midi.audio_filename,
-            # 'audio_file': audio_midi.audio_file.name,
             'created_at': audio_midi.created_at,
             'updated_at': audio_midi.updated_at,
             'status': audio_midi.status,
-            'current_segment': audio_midi.current_segment,
-            'num_transcription_segments': audio_midi.num_transcription_segments,
+            'has_midi': bool(audio_midi.midi_file),
         }
         return JsonResponse(response_data, status=200)
 
@@ -138,52 +120,34 @@ def audio_status(request, audio_midi_id):
         return JsonResponse({'error': 'Internal server error', 'details': str(e)}, status=500)
 
 @csrf_exempt
-def list_midi_chunks(request, audio_midi_id):
+def get_midi(request, audio_midi_id):
     try:
-        # Fetch the AudioMIDI instance by ID
         audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
-        # Fetch all MIDI chunks related to this AudioMIDI instance
-        midi_chunks = MIDIChunk.objects.filter(audio_midi=audio_midi).order_by('segment_index')
-        
-        # Prepare data to return
-        chunks_info = [{
-            'midi_file_name': chunk.midi_file.name if chunk.midi_file else None,
-            'segment_index': chunk.segment_index
-        } for chunk in midi_chunks]
-
-        return JsonResponse({
+        midi_info = {
             'audio_midi_id': audio_midi_id,
             'audio_filename': audio_midi.audio_filename,
-            'midi_chunks': chunks_info
-        }, status=200)
+            'midi_file_name': audio_midi.midi_file.name if audio_midi.midi_file else None,
+        }
+
+        return JsonResponse(midi_info, status=200)
 
     except AudioMIDI.DoesNotExist:
         return JsonResponse({'error': 'AudioMIDI object not found'}, status=404)
     except Exception as e:
-        # Handle unexpected errors
         return JsonResponse({'error': 'Internal server error', 'details': str(e)}, status=500)
 
 @csrf_exempt
-def download_midi_chunk(request, audio_midi_id, segment_index):
+def download_midi(request, audio_midi_id):
     try:
-        # Fetch the AudioMIDI instance by ID
         audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
 
-        # Fetch the MIDI chunk based on the segment index
-        midi_chunk = MIDIChunk.objects.get(audio_midi=audio_midi, segment_index=segment_index)
+        if not audio_midi.midi_file:
+            raise Http404("No MIDI file found for this transcription.")
 
-        # Assuming midi_file is the field name in the MIDIChunk model where the file path is stored
-        if not midi_chunk.midi_file:
-            raise Http404("No MIDI file found for the provided segment index.")
-
-        # Return the MIDI file as a response
-        return FileResponse(midi_chunk.midi_file.open(), as_attachment=True, filename=midi_chunk.midi_file.name)
+        return FileResponse(audio_midi.midi_file.open(), as_attachment=True, filename=os.path.basename(audio_midi.midi_file.name))
 
     except AudioMIDI.DoesNotExist:
         return JsonResponse({'error': 'AudioMIDI object not found'}, status=404)
-    except MIDIChunk.DoesNotExist:
-        return JsonResponse({'error': 'MIDI chunk not found'}, status=404)
     except Exception as e:
-        # General exception handler for any other unanticipated exceptions
         return JsonResponse({'error': 'Internal server error', 'details': str(e)}, status=500)

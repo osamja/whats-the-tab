@@ -54,3 +54,62 @@ cd /home/sammy/workspace/whats-the-tab/src/mt3-transcription/musictranscription
 source ../venv/bin/activate
 python manage.py shell
 ```
+
+# Django transcription backends
+The transcription app supports both regular MT3 (JAX/T5X) and PyTorch MT3.
+
+Backend selection is controlled by `USE_PYTORCH`:
+- `USE_PYTORCH=True` uses `transcribeapp/ml_pytorch.py`
+- `USE_PYTORCH=False` uses `transcribeapp/ml.py`
+
+Recommended local development (sync mode for easier debugging):
+```bash
+cd src/mt3-transcription/musictranscription
+source ../venv/bin/activate
+USE_PYTORCH=True IS_ASYNC=False python manage.py runserver 127.0.0.1:8008
+```
+
+Switch to regular MT3:
+```bash
+cd src/mt3-transcription/musictranscription
+source ../venv/bin/activate
+USE_PYTORCH=False IS_ASYNC=False python manage.py runserver 127.0.0.1:8008
+```
+
+# PyTorch checkpoint notes
+PyTorch checkpoint is expected at:
+`src/mt3-transcription/pytorch_mt3/mt3_pytorch_checkpoint.pt`
+
+`PyTorchInferenceModel` resolves relative checkpoint paths against the project root, so
+`pytorch_mt3/mt3_pytorch_checkpoint.pt` is valid when running Django from
+`src/mt3-transcription/musictranscription`.
+
+# API smoke test
+Run server first (PyTorch or JAX mode), then:
+
+```bash
+# 1) Upload audio
+curl -F "audio=@/home/samus/programming-projects/whats-the-tab/dataset/in-the-morning-jcole.mp3" \
+  http://127.0.0.1:8008/transcribe/upload/
+```
+
+From the response, copy `audio_midi_id` and use it below:
+
+```bash
+# 2) Generate MIDI
+curl -X POST \
+  -d "audio_midi_id=<AUDIO_MIDI_ID>" \
+  -d "num_transcription_segments=1" \
+  -d "audio_chunk_length=30" \
+  http://127.0.0.1:8008/transcribe/generate/
+
+# 3) Check status
+curl http://127.0.0.1:8008/transcribe/status/<AUDIO_MIDI_ID>/
+
+# 4) List available MIDI chunks
+curl http://127.0.0.1:8008/transcribe/midi_chunks/<AUDIO_MIDI_ID>/
+
+# 5) Download first MIDI chunk
+curl -o /tmp/smoke_chunk0.midi \
+  http://127.0.0.1:8008/transcribe/download_midi_chunk/<AUDIO_MIDI_ID>/0
+```
