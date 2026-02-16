@@ -20,13 +20,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "django-insecure-b98rd+t)ps#-7ov^+tiu_%gtri9#(1y0+h^gg0mu(n#8g)gw9#",
-)
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is required")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "t")
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 
 # Frontend URL for redirects
 FRONTEND_URL = 'https://pyaar.ai'
@@ -225,8 +224,8 @@ ACCOUNT_PASSWORD_RESET_VERIFY_URL = 'api/auth/password/reset/verify/{uid}/{token
 
 # Email settings
 EMAIL_BACKEND = 'musictranscription.email_backends.mailgun_backend.MailgunEmailBackend'
-MAILGUN_API_KEY = '19228350fe62f341ec57470f781b2c72-f6202374-2a886de8'
-MAILGUN_DOMAIN = 'mg.pyaar.ai'
+MAILGUN_API_KEY = os.getenv('MAILGUN_API_KEY', '')
+MAILGUN_DOMAIN = os.getenv('MAILGUN_DOMAIN', 'mg.pyaar.ai')
 DEFAULT_FROM_EMAIL = 'support@pyaar.ai'
 
 ACCOUNT_SIGNUP_REDIRECT_URL = "/"
