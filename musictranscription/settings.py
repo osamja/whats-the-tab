@@ -189,7 +189,7 @@ SITE_ID = 1
 # Configure AllAuth settings
 ACCOUNT_AUTHENTICATION_METHOD = "username_email"  # Allow login with username OR email
 ACCOUNT_EMAIL_REQUIRED = True  # Email is mandatory
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"  # Enable email verification
+ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True  # Enable email confirmation requirement
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 ACCOUNT_EMAIL_CONFIRMATION_HMAC = True
