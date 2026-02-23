@@ -8,3 +8,5 @@ class AudioMIDI(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     status = models.CharField(max_length=20, default='pending')
+    current_chunk = models.IntegerField(default=0)
+    total_chunks = models.IntegerField(default=0)

@@ -37,7 +37,12 @@ def generate_midi_from_audio(audio_midi_id):
     inference_model = PyTorchInferenceModel(CHECKPOINT_PATH, "mt3")
     audio = load_audio(audio_midi.audio_file.path, sample_rate=SAMPLE_RATE, mono=True).cpu().numpy()
 
-    est_ns = inference_model(audio)
+    def progress_callback(current, total):
+        audio_midi.current_chunk = current
+        audio_midi.total_chunks = total
+        audio_midi.save(update_fields=['current_chunk', 'total_chunks'])
+
+    est_ns = inference_model(audio, progress_callback=progress_callback)
 
     midi_filename = f"{audio_midi.id}.midi"
     with tempfile.NamedTemporaryFile(delete=False, suffix='.midi') as tmp:

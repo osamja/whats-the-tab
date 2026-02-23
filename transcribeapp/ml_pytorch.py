@@ -66,7 +66,7 @@ class PyTorchInferenceModel:
         # Fallback: expected location inside pytorch_mt3 directory.
         return os.path.join(pytorch_mt3_path, os.path.basename(checkpoint_path))
 
-    def __call__(self, audio):
+    def __call__(self, audio, progress_callback=None):
         """Infer note sequence from audio samples.
 
         Args:
@@ -76,7 +76,7 @@ class PyTorchInferenceModel:
             A note_sequence of the transcribed audio.
         """
         print(f"  Processing audio: {len(audio)/SAMPLE_RATE:.2f}s")
-        result = self.model.transcribe(audio)
+        result = self.model.transcribe(audio, progress_callback=progress_callback)
         est_ns = result.get("note_sequence")
         if est_ns is None:
             raise RuntimeError("PyTorch transcription completed without note_sequence.")
