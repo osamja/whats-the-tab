@@ -11,6 +11,9 @@ load_dotenv()
 
 IS_ASYNC = os.getenv('IS_ASYNC', 'False').lower() in ('true', '1', 't')
 
+def health(request):
+    return JsonResponse({'status': 'ok'})
+
 @csrf_exempt  # @todo remove for prod
 def upload_audio(request):
   if request.method == 'POST' and request.FILES.get('audio', False):
