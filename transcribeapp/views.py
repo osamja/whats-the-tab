@@ -116,13 +116,10 @@ def get_midi(request, audio_midi_id):
     try:
         audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
-        midi_info = {
-            'audio_midi_id': audio_midi_id,
-            'audio_filename': audio_midi.audio_filename,
-            'midi_file_name': audio_midi.midi_file.name if audio_midi.midi_file else None,
-        }
+        if not audio_midi.midi_file:
+            raise Http404("No MIDI file found for this transcription.")
 
-        return JsonResponse(midi_info, status=200)
+        return FileResponse(audio_midi.midi_file.open(), content_type='audio/midi', filename=os.path.basename(audio_midi.midi_file.name))
 
     except AudioMIDI.DoesNotExist:
         return JsonResponse({'error': 'AudioMIDI object not found'}, status=404)
