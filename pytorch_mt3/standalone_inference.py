@@ -94,7 +94,7 @@ class StandaloneMT3:
 
         return result
 
-    def transcribe(self, audio):
+    def transcribe(self, audio, progress_callback=None):
         """Transcribe audio samples to tokens.
 
         Args:
@@ -122,6 +122,9 @@ class StandaloneMT3:
         num_chunks = (num_frames + chunk_size - 1) // chunk_size
 
         print(f"  Processing {num_chunks} chunk(s)...")
+
+        if progress_callback:
+            progress_callback(0, num_chunks)
 
         for chunk_idx in range(num_chunks):
             start_idx = chunk_idx * chunk_size
@@ -159,6 +162,9 @@ class StandaloneMT3:
             all_start_times.append(start_time)
 
             print(f"    Chunk {chunk_idx + 1}/{num_chunks}: {len(tokens)} tokens")
+
+            if progress_callback:
+                progress_callback(chunk_idx + 1, num_chunks)
 
         # Try to decode with note-seq if available
         note_sequence = None

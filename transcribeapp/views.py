@@ -102,6 +102,8 @@ def audio_status(request, audio_midi_id):
             'updated_at': audio_midi.updated_at,
             'status': audio_midi.status,
             'has_midi': bool(audio_midi.midi_file),
+            'current_chunk': audio_midi.current_chunk,
+            'total_chunks': audio_midi.total_chunks,
         }
         return JsonResponse(response_data, status=200)
 
