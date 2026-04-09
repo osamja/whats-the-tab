@@ -31,21 +31,17 @@ DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
 FRONTEND_URL = 'https://pyaar.ai'
 
 ALLOWED_HOSTS = [
-  '172.18.250.65',
-  '127.0.0.1',
-  '100.85.133.118',
-  '142.170.89.112',
-  'pyaar.ai',
-  'zubyj.com',
-  'localhost',
-]
+    'pyaar.ai',
+    'zubyj.com',
+    '127.0.0.1',
+    'localhost',
+] + [h.strip() for h in os.getenv('EXTRA_ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 CSRF_TRUSTED_ORIGINS = [
-    'http://127.0.0.1:8000', 
-    'https://pyaar.ai', 
+    'http://127.0.0.1:8000',
+    'https://pyaar.ai',
     'http://localhost:3000',
-    'http://173.255.217.39:3000'  # Adding your frontend domain
-]
+] + [o.strip() for o in os.getenv('EXTRA_CSRF_ORIGINS', '').split(',') if o.strip()]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -77,10 +73,9 @@ INSTALLED_APPS = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://173.255.217.39:3000",
     "https://pyaar.ai",
-    "http://pyaar.ai"
-]
+    "http://pyaar.ai",
+] + [o.strip() for o in os.getenv('EXTRA_CORS_ORIGINS', '').split(',') if o.strip()]
 
 CORS_ALLOW_CREDENTIALS = True  # Allow credentials (cookies, authorization headers)
 
