@@ -55,6 +55,8 @@ uv run gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 2 --worker-class gthre
 - CUDA releases the GIL during kernel execution, so the second thread can handle status polls concurrently.
 - 1 worker keeps GPU memory usage low (model is loaded once).
 
+For deploying to a vast.ai GPU instance behind the `pyaar.ai/transcribe/*` nginx proxy (the production setup), see [`docs/vast-deploy.md`](docs/vast-deploy.md). vast instances are containers themselves and cannot run Docker, so the runbook covers launching `redis-server`, `gunicorn`, and the dramatiq worker directly under `uv` with `IS_ASYNC=True`.
+
 ## API
 
 | Endpoint | Method | Description |
