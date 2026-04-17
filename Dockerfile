@@ -3,7 +3,11 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    DEBUG=False \
+    USE_PYTORCH=True \
+    IS_ASYNC=True \
+    REDIS_URL=redis://localhost:6379
 
 WORKDIR /app
 
@@ -17,6 +21,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ffmpeg \
     git \
+    curl \
+    redis-server \
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
@@ -33,4 +40,7 @@ COPY . .
 
 EXPOSE 8008
 
-CMD ["sh", "-c", "uv run python manage.py migrate && uv run gunicorn --bind 0.0.0.0:8008 --timeout 300 musictranscription.wsgi"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD curl -fsS http://localhost:8008/transcribe/ || exit 1
+
+CMD ["/usr/bin/supervisord", "-n", "-c", "/app/supervisord.conf"]
