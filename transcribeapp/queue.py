@@ -139,7 +139,9 @@ def get_queue_stats():
     pipeline.llen(settings.TASK_FAILED_KEY)
     pipeline.zcard(settings.TASK_PROCESSING_TIME_KEY)
     pipeline.pubsub_numsub(settings.TASK_NEW_CHANNEL)
-    pipeline.info("stats")
+    pipeline.info("clients")
+    pipeline.info("server")
+    pipeline.info("memory")
     results = pipeline.execute()
     return {
         "queue_pending": results[0],
@@ -148,6 +150,6 @@ def get_queue_stats():
         "processing_timed": results[3],
         "subscribers_task_new": results[4][0][1] if results[4] else 0,
         "redis_connected_clients": results[5].get("connected_clients", 0),
-        "redis_uptime_seconds": results[5].get("uptime_in_seconds", 0),
-        "redis_used_memory_human": results[5].get("used_memory_human", "0"),
+        "redis_uptime_seconds": results[6].get("uptime_in_seconds", 0),
+        "redis_used_memory_human": results[7].get("used_memory_human", "0"),
     }
