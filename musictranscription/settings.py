@@ -35,6 +35,7 @@ ALLOWED_HOSTS = [
     'zubyj.com',
     '127.0.0.1',
     'localhost',
+    'web',
 ] + [h.strip() for h in os.getenv('EXTRA_ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 CSRF_TRUSTED_ORIGINS = [
