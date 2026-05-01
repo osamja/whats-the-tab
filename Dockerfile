@@ -27,10 +27,10 @@ COPY uv.lock ./
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --no-install-project --extra gpu
 
 COPY . .
 
 EXPOSE 8008
 
-CMD ["sh", "-c", "uv run python manage.py migrate && uv run gunicorn --bind 0.0.0.0:8008 --timeout 300 musictranscription.wsgi"]
+CMD ["uv", "run", "python", "manage.py", "runworker"]

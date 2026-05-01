@@ -10,3 +10,4 @@ class AudioMIDI(models.Model):
     status = models.CharField(max_length=20, default='pending')
     current_chunk = models.IntegerField(default=0)
     total_chunks = models.IntegerField(default=0)
+    error_message = models.TextField(blank=True, default="")

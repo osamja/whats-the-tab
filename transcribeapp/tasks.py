@@ -1,59 +1,41 @@
-# tasks.py
-import datetime, uuid
-from transcribeapp.models import AudioMIDI
-from django.core.files import File
-from django.core.files.base import ContentFile
-import dramatiq
-import note_seq
-from pytube import YouTube
-import tempfile
-import os
+import uuid, datetime
 
-from .ml_pytorch import PyTorchInferenceModel, load_audio, SAMPLE_RATE
 
-CHECKPOINT_PATH = 'pytorch_mt3/mt3_pytorch_checkpoint.pt'
+def get_audio_filename(is_mp4=False):
+    ext = ".mp4" if is_mp4 else ".wav"
+    return f"{datetime.datetime.now().isoformat()}-{uuid.uuid4().hex}{ext}"
 
-@dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
-def download_youtube_audio_and_save(audio_midi_id):
-    audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
-    yt = YouTube(audio_midi.youtube_url)
+
+def download_youtube_audio(youtube_url, output_dir):
+    from pytube import YouTube
+    import os
+
+    yt = YouTube(youtube_url)
     audio_stream = yt.streams.filter(only_audio=True).first()
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-        audio_stream.download(filename=tmp_file.name)
+    filename = f"{uuid.uuid4().hex}.mp4"
+    output_path = os.path.join(output_dir, filename)
+    audio_stream.download(output_path=output_dir, filename=filename)
 
-        with open(tmp_file.name, 'rb') as file_data:
-            audio_midi.audio_file.save(audio_midi.audio_filename, ContentFile(file_data.read()))
+    return output_path
 
-        audio_midi.status = 'youtube_audio_downloaded'
-        audio_midi.save()
 
-    os.remove(tmp_file.name)
+def transcribe_audio(audio_filepath, output_dir, progress_callback=None):
+    import note_seq
+    from .ml_pytorch import PyTorchInferenceModel, load_audio, SAMPLE_RATE
+    import os
 
-@dramatiq.actor(max_retries=3, min_backoff=1000, max_backoff=10000)
-def generate_midi_from_audio(audio_midi_id):
-    audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
+    checkpoint_path = "pytorch_mt3/mt3_pytorch_checkpoint.pt"
 
-    inference_model = PyTorchInferenceModel(CHECKPOINT_PATH, "mt3")
-    audio = load_audio(audio_midi.audio_file.path, sample_rate=SAMPLE_RATE, mono=True).cpu().numpy()
-
-    def progress_callback(current, total):
-        audio_midi.current_chunk = current
-        audio_midi.total_chunks = total
-        audio_midi.save(update_fields=['current_chunk', 'total_chunks'])
+    inference_model = PyTorchInferenceModel(checkpoint_path, "mt3")
+    audio = (
+        load_audio(audio_filepath, sample_rate=SAMPLE_RATE, mono=True).cpu().numpy()
+    )
 
     est_ns = inference_model(audio, progress_callback=progress_callback)
 
-    midi_filename = f"{audio_midi.id}.midi"
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.midi') as tmp:
-        note_seq.sequence_proto_to_midi_file(est_ns, tmp.name)
-        with open(tmp.name, 'rb') as midi_file:
-            audio_midi.midi_file.save(midi_filename, File(midi_file))
-    os.remove(tmp.name)
+    midi_filename = f"{uuid.uuid4().hex}.midi"
+    output_path = os.path.join(output_dir, midi_filename)
+    note_seq.sequence_proto_to_midi_file(est_ns, output_path)
 
-    audio_midi.status = 'completed'
-    audio_midi.save()
-
-def get_audio_filename(is_mp4=False):
-    ext = '.mp4' if is_mp4 else '.wav'
-    return f"{datetime.datetime.now().isoformat()}-{uuid.uuid4().hex}{ext}"
+    return output_path
