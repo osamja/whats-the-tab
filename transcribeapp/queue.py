@@ -38,10 +38,12 @@ def claim_task():
     if not task_id:
         return None
 
-    r.zadd(settings.TASK_PROCESSING_TIME_KEY, {task_id: time.time()})
+    tid = task_id.decode() if isinstance(task_id, bytes) else task_id
+
+    r.zadd(settings.TASK_PROCESSING_TIME_KEY, {tid: time.time()})
 
     r.hset(
-        f"{settings.TASK_HASH_PREFIX}{task_id}",
+        f"{settings.TASK_HASH_PREFIX}{tid}",
         mapping={
             "status": "processing",
             "started_at": time.time(),
@@ -49,9 +51,9 @@ def claim_task():
         },
     )
 
-    r.publish(settings.TASK_CLAIMED_CHANNEL, task_id)
+    r.publish(settings.TASK_CLAIMED_CHANNEL, tid)
 
-    return get_task_state(task_id)
+    return get_task_state(tid)
 
 
 def get_task_state(task_id):
