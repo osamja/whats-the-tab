@@ -9,4 +9,6 @@ urlpatterns = [
     path('status/<int:audio_midi_id>/', views.audio_status, name='audio_status'),
     path('midi/<int:audio_midi_id>/', views.get_midi, name='get_midi'),
     path('download_midi/<int:audio_midi_id>/', views.download_midi, name='download_midi'),
+    path('_result/', views.result, name='result'),
+    path('metrics/', views.metrics, name='metrics'),
 ]

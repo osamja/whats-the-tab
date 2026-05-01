@@ -57,7 +57,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'transcribeapp',
     'django_cleanup.apps.CleanupConfig',
-    *(['django_dramatiq'] if os.getenv('IS_ASYNC', 'False').lower() in ('true', '1', 't') else []),
     'corsheaders',
     'allauth',
     'allauth.account',
@@ -111,32 +110,24 @@ REST_FRAMEWORK = {
     ),
 }
  
-IS_ASYNC_SETTING = os.getenv('IS_ASYNC', 'False').lower() in ('true', '1', 't')
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-if IS_ASYNC_SETTING:
-    import dramatiq
-    from dramatiq.brokers.redis import RedisBroker
+TASK_QUEUE_KEY = "task:queue"
+TASK_PROCESSING_KEY = "task:processing"
+TASK_PROCESSING_TIME_KEY = "task:processing:time"
+TASK_FAILED_KEY = "task:failed"
+TASK_RESULTS_KEY = "task:results"
+TASK_HASH_PREFIX = "task:"
 
-    REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+TASK_NEW_CHANNEL = "task:new"
+TASK_CLAIMED_CHANNEL = "task:claimed"
+TASK_PROGRESS_PREFIX = "task:progress:"
+TASK_COMPLETED_CHANNEL = "task:completed"
+TASK_FAILED_CHANNEL = "task:failed"
 
-    DRAMATIQ_BROKER = {
-        "BROKER": "dramatiq.brokers.redis.RedisBroker",
-        "OPTIONS": {
-            "url": REDIS_URL,
-        },
-        "MIDDLEWARE": [
-            "dramatiq.middleware.AgeLimit",
-            "dramatiq.middleware.TimeLimit",
-            "dramatiq.middleware.Callbacks",
-            "dramatiq.middleware.Retries",
-            "django_dramatiq.middleware.DbConnectionsMiddleware",
-        ]
-    }
-else:
-    import dramatiq
-    from dramatiq.brokers.stub import StubBroker
+TASK_PROCESSING_TIMEOUT = int(os.getenv("TASK_PROCESSING_TIMEOUT", "300"))
 
-    dramatiq.set_broker(StubBroker())
+WEB_URL = os.getenv("WEB_URL", "http://localhost:8008")
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -233,12 +224,22 @@ WSGI_APPLICATION = 'musictranscription.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+if DATABASE_URL:
+    import dj_database_url
+    DATABASES = {
+        "default": dj_database_url.config(default=DATABASE_URL, conn_max_age=600)
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR
 
 
 # Password validation
