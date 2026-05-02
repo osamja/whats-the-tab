@@ -154,3 +154,4 @@ SGM-v2.01-*.sf2
 dataset/
 
 env_vars.sh
+.aider*
