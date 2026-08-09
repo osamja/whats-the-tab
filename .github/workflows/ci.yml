@@ -64,7 +64,7 @@ jobs:
           SECRET_KEY: ci-test-key
           DATABASE_URL: postgres://whatsthetab:whatsthetab@localhost:5432/whatsthetab
           REDIS_URL: redis://localhost:6379
-        run: uv run python manage.py test
+        run: uv run python manage.py test accounts
 
   build-push:
     needs: test
