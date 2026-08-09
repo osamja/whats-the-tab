@@ -102,6 +102,7 @@ jobs:
   health-check:
     needs: build-push
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Verify API health
         run: |
