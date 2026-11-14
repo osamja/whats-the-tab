@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.health, name='health'),
+    path('ready/', views.readiness, name='readiness'),
     path('upload/', views.upload_audio, name='upload_audio'),
     path('upload_from_yt/', views.upload_from_youtube, name='upload_from_youtube'),
     path('generate/', views.transcribe, name='transcribe'),

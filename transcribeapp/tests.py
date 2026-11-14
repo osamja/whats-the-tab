@@ -4,11 +4,12 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import redis
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import Resolver404, resolve, reverse
 
 from transcribeapp.models import AudioMIDI
@@ -20,6 +21,7 @@ from transcribeapp.queue import (
     mark_completed,
     reap_stale_tasks,
 )
+from transcribeapp.ratelimit import check_rate_limit
 
 
 class MediaRootTests(TestCase):
@@ -35,6 +37,14 @@ class MediaRootTests(TestCase):
 
 
 class UploadApiTests(TestCase):
+    def setUp(self):
+        self.rate_limit_patcher = patch(
+            "transcribeapp.views.check_rate_limit",
+            return_value=(True, 1),
+        )
+        self.rate_limit_patcher.start()
+        self.addCleanup(self.rate_limit_patcher.stop)
+
     @override_settings(MAX_UPLOAD_BYTES=10)
     def test_upload_rejects_files_over_size_limit(self):
         response = self.client.post(
@@ -66,6 +76,14 @@ class UploadApiTests(TestCase):
 
 
 class TranscribeApiTests(TestCase):
+    def setUp(self):
+        self.rate_limit_patcher = patch(
+            "transcribeapp.views.check_rate_limit",
+            return_value=(True, 1),
+        )
+        self.rate_limit_patcher.start()
+        self.addCleanup(self.rate_limit_patcher.stop)
+
     def test_transcribe_rejects_job_without_audio(self):
         audio_midi = AudioMIDI.objects.create(
             audio_filename="pending-youtube.mp4",
@@ -83,6 +101,30 @@ class TranscribeApiTests(TestCase):
     def test_status_field_accepts_youtube_downloaded_status(self):
         field = AudioMIDI._meta.get_field("status")
         self.assertGreaterEqual(field.max_length, len("youtube_audio_downloaded"))
+
+
+class ReadinessTests(TestCase):
+    @patch("transcribeapp.views.get_redis")
+    def test_readiness_reports_ok_when_dependencies_are_healthy(self, get_redis):
+        redis_client = get_redis.return_value
+        redis_client.ping.return_value = True
+        redis_client.scan_iter.return_value = [b"worker:abc123"]
+
+        response = self.client.get(reverse("readiness"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+        self.assertEqual(response.json()["checks"]["workers_online"], 1)
+
+    @patch("transcribeapp.views.get_redis")
+    def test_readiness_reports_degraded_when_redis_is_down(self, get_redis):
+        get_redis.side_effect = redis.RedisError("connection refused")
+
+        response = self.client.get(reverse("readiness"))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["status"], "degraded")
+        self.assertIn("error", response.json()["checks"]["redis"])
 
 
 @override_settings(WORKER_SHARED_SECRET="test-worker-secret")
@@ -164,6 +206,40 @@ class ResultCallbackTests(TestCase):
             AudioMIDI.Status.YOUTUBE_AUDIO_DOWNLOADED,
         )
         self.assertTrue(audio_midi.audio_file)
+
+
+class RateLimitTests(TestCase):
+    redis_url = os.getenv("TEST_REDIS_URL", "redis://localhost:6379/14")
+
+    def setUp(self):
+        try:
+            self.redis = redis.from_url(self.redis_url)
+            self.redis.ping()
+        except redis.RedisError:
+            self.skipTest(f"Redis is not available at {self.redis_url}")
+
+        self.redis.flushdb()
+        self.settings_ctx = self.settings(REDIS_URL=self.redis_url)
+        self.settings_ctx.enable()
+        self.addCleanup(self.settings_ctx.disable)
+
+    def test_rate_limit_allows_then_blocks(self):
+        request = RequestFactory().get("/", REMOTE_ADDR="203.0.113.10")
+
+        allowed, count = check_rate_limit(request, "test", limit=1)
+        self.assertTrue(allowed)
+        self.assertEqual(count, 1)
+
+        allowed, count = check_rate_limit(request, "test", limit=1)
+        self.assertFalse(allowed)
+        self.assertEqual(count, 2)
+
+    def test_rate_limit_is_per_ip(self):
+        first = RequestFactory().get("/", REMOTE_ADDR="203.0.113.10")
+        second = RequestFactory().get("/", REMOTE_ADDR="203.0.113.11")
+
+        self.assertTrue(check_rate_limit(first, "test", limit=1)[0])
+        self.assertTrue(check_rate_limit(second, "test", limit=1)[0])
 
 
 class QueueTests(TestCase):

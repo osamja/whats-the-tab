@@ -162,6 +162,11 @@ TASK_FAILED_MAX = int(os.getenv("TASK_FAILED_MAX", "1000"))
 MAX_AUDIO_DURATION_SECONDS = int(os.getenv("MAX_AUDIO_DURATION_SECONDS", "600"))
 MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 
+RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
+RATE_LIMIT_UPLOADS = int(os.getenv("RATE_LIMIT_UPLOADS", "60"))
+RATE_LIMIT_TRANSCRIPTIONS = int(os.getenv("RATE_LIMIT_TRANSCRIPTIONS", "20"))
+RATE_LIMIT_YOUTUBE_DOWNLOADS = int(os.getenv("RATE_LIMIT_YOUTUBE_DOWNLOADS", "10"))
+
 WEB_URL = os.getenv("WEB_URL", "http://localhost:8008")
 
 # Shared secret used by the worker when posting results back to the web app.

@@ -17,6 +17,8 @@ Completed in the `pre-deploy-hardening` branch:
 - [x] Add stale-task reaping, retry limit, task-hash TTLs, dead-letter cap, and
   resilient heartbeat.
 - [x] Add upload size/content-type limits and audio-duration checks.
+- [x] Add per-IP Redis rate limits for uploads, transcriptions, and YouTube
+  downloads, plus a `/transcribe/ready/` readiness endpoint.
 - [x] Fix the `youtube_audio_downloaded` status length, use `TextChoices`, and
   switch YouTube downloads to `yt-dlp`.
 - [x] Load `.env`, add `django.contrib.sites` and a default site migration,
@@ -26,8 +28,10 @@ Completed in the `pre-deploy-hardening` branch:
 - [x] Add `transcribeapp` tests for media scoping, callback auth, upload
   limits, status handling, queue claim attribution, and reaping.
 - [ ] Vast serverless worker image, dispatcher, and R2/S3 media.
-- [ ] Model singleton, KV cache, batching, and precision tuning.
-- [ ] Rate limiting and optional API-key/user ownership.
+- [x] Cache the inference model per worker process.
+- [x] Pad the final chunk with the log-mel silence floor instead of 0.0.
+- [ ] KV cache, chunk batching, and precision tuning.
+- [ ] Optional API-key/user ownership for jobs.
 - [ ] Account-test cleanup and CI worker-image build.
 
 ---

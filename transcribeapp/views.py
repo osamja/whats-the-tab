@@ -8,7 +8,8 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import AudioMIDI
-from .queue import enqueue_task
+from .queue import enqueue_task, get_redis
+from .ratelimit import check_rate_limit
 from .tasks import get_audio_filename
 
 
@@ -16,9 +17,70 @@ def health(request):
     return JsonResponse({"status": "ok"})
 
 
+def readiness(request):
+    checks = {}
+    ready = True
+
+    try:
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+        checks["database"] = "ok"
+    except Exception:
+        ready = False
+        checks["database"] = "error"
+
+    try:
+        r = get_redis()
+        r.ping()
+        workers = [
+            key.decode() if isinstance(key, bytes) else key
+            for key in r.scan_iter("worker:*")
+        ]
+        checks["redis"] = "ok"
+        checks["workers_online"] = len(workers)
+    except Exception:
+        ready = False
+        checks["redis"] = "error"
+
+    return JsonResponse(
+        {"status": "ok" if ready else "degraded", "checks": checks},
+        status=200 if ready else 503,
+    )
+
+
+def _rate_limit_response(request, action, limit):
+    try:
+        allowed, _ = check_rate_limit(request, action, limit=limit)
+    except Exception as e:
+        return JsonResponse(
+            {"error": "Rate limiting is unavailable", "details": str(e)},
+            status=503,
+        )
+
+    if not allowed:
+        response = JsonResponse(
+            {"error": "Rate limit exceeded. Try again later."},
+            status=429,
+        )
+        response["Retry-After"] = str(settings.RATE_LIMIT_WINDOW_SECONDS)
+        return response
+
+    return None
+
+
 @csrf_exempt
 def upload_audio(request):
     if request.method == "POST" and request.FILES.get("audio", False):
+        limited = _rate_limit_response(
+            request,
+            "upload",
+            settings.RATE_LIMIT_UPLOADS,
+        )
+        if limited:
+            return limited
+
         audio_file = request.FILES["audio"]
 
         if audio_file.size > settings.MAX_UPLOAD_BYTES:
@@ -64,6 +126,14 @@ def upload_audio(request):
 @csrf_exempt
 def upload_from_youtube(request):
     if request.method == "POST":
+        limited = _rate_limit_response(
+            request,
+            "youtube_download",
+            settings.RATE_LIMIT_YOUTUBE_DOWNLOADS,
+        )
+        if limited:
+            return limited
+
         youtube_url = request.POST.get("youtube_url")
         if not youtube_url:
             return JsonResponse({"error": "No YouTube URL provided"}, status=400)
@@ -104,6 +174,14 @@ def upload_from_youtube(request):
 def transcribe(request):
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request method"}, status=400)
+
+    limited = _rate_limit_response(
+        request,
+        "transcribe",
+        settings.RATE_LIMIT_TRANSCRIPTIONS,
+    )
+    if limited:
+        return limited
 
     try:
         audio_midi_id = request.POST["audio_midi_id"]

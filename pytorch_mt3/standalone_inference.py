@@ -3,10 +3,15 @@
 This module provides inference without requiring full JAX/T5X installation.
 """
 
+import math
 import os
 import sys
 import torch
 import numpy as np
+
+# The spectrogram uses log(clamp(mel, min=1e-5)); padding in log-mel space must
+# use the same floor or it looks much louder than silence to the model.
+SILENCE_LOG_MEL = math.log(1e-5)
 
 # Import our PyTorch implementation.
 from .pytorch_model import MT3Model, MT3Config
@@ -133,11 +138,16 @@ class StandaloneMT3:
             chunk_frames = frames[start_idx:end_idx]
             chunk_times = frame_times[start_idx:end_idx]
 
-            # Pad if necessary
+            # Pad if necessary. Use the log-mel silence floor rather than 0.0,
+            # which would look substantially louder than actual silence.
             if chunk_frames.size(0) < chunk_size:
                 import torch.nn.functional as F
                 padding = chunk_size - chunk_frames.size(0)
-                chunk_frames = F.pad(chunk_frames, (0, 0, 0, padding))
+                chunk_frames = F.pad(
+                    chunk_frames,
+                    (0, 0, 0, padding),
+                    value=SILENCE_LOG_MEL,
+                )
 
             # Add batch dimension
             chunk_frames = chunk_frames.unsqueeze(0)

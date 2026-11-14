@@ -1,4 +1,29 @@
-import uuid, datetime
+import datetime
+import os
+import threading
+import uuid
+
+CHECKPOINT_PATH = "pytorch_mt3/mt3_pytorch_checkpoint.pt"
+
+_inference_model = None
+_inference_model_lock = threading.Lock()
+
+
+def _get_inference_model():
+    """Load the MT3 model once per worker process.
+
+    The checkpoint is large and loading it on every task wastes several seconds
+    of GPU billing time. The worker processes one task at a time, but a lock
+    keeps this safe if that ever changes.
+    """
+    global _inference_model
+    if _inference_model is None:
+        with _inference_model_lock:
+            if _inference_model is None:
+                from .ml_pytorch import PyTorchInferenceModel
+
+                _inference_model = PyTorchInferenceModel(CHECKPOINT_PATH, "mt3")
+    return _inference_model
 
 
 def get_audio_filename(is_mp4=False):
@@ -7,8 +32,6 @@ def get_audio_filename(is_mp4=False):
 
 
 def download_youtube_audio(youtube_url, output_dir):
-    import os
-
     import yt_dlp
     from django.conf import settings
 
@@ -45,10 +68,8 @@ def transcribe_audio(audio_filepath, output_dir, progress_callback=None):
     import note_seq
     import torchaudio
     from django.conf import settings
-    from .ml_pytorch import PyTorchInferenceModel, load_audio, SAMPLE_RATE
-    import os
+    from .ml_pytorch import load_audio, SAMPLE_RATE
 
-    checkpoint_path = "pytorch_mt3/mt3_pytorch_checkpoint.pt"
     max_duration = settings.MAX_AUDIO_DURATION_SECONDS
 
     # Check duration before decoding the whole file into memory.
@@ -77,7 +98,7 @@ def transcribe_audio(audio_filepath, output_dir, progress_callback=None):
             f"Audio is {duration_seconds:.1f}s long; maximum is {max_duration}s"
         )
 
-    inference_model = PyTorchInferenceModel(checkpoint_path, "mt3")
+    inference_model = _get_inference_model()
     est_ns = inference_model(audio, progress_callback=progress_callback)
 
     midi_filename = f"{uuid.uuid4().hex}.midi"

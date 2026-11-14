@@ -71,13 +71,16 @@ For deploying to a vast.ai GPU instance behind the `pyaar.ai/transcribe/*` nginx
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/transcribe/` | GET | Health check |
+| `/transcribe/` | GET | Liveness check |
+| `/transcribe/ready/` | GET | Readiness check (DB, Redis, worker heartbeats) |
 | `/transcribe/upload/` | POST | Upload an MP3 file |
 | `/transcribe/upload_from_yt/` | POST | Upload via YouTube URL |
 | `/transcribe/generate/` | POST | Start MIDI transcription |
 | `/transcribe/status/<id>/` | GET | Poll transcription progress (`current_chunk`/`total_chunks`) |
 | `/transcribe/midi/<id>/` | GET | Get MIDI file (binary) |
 | `/transcribe/download_midi/<id>/` | GET | Download MIDI as attachment |
+| `/transcribe/_result/` | POST | Internal worker result callback (requires `X-Worker-Token`) |
+| `/transcribe/metrics/` | GET | Internal queue/Redis metrics |
 
 ### Example
 
