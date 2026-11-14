@@ -3,14 +3,18 @@ import shutil
 import tempfile
 import time
 import uuid
+from datetime import timedelta
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 import redis
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import Resolver404, resolve, reverse
+from django.utils import timezone
 
 from transcribeapp.models import AudioMIDI
 from transcribeapp.queue import (
@@ -101,6 +105,22 @@ class TranscribeApiTests(TestCase):
     def test_status_field_accepts_youtube_downloaded_status(self):
         field = AudioMIDI._meta.get_field("status")
         self.assertGreaterEqual(field.max_length, len("youtube_audio_downloaded"))
+
+
+class PruneJobsTests(TestCase):
+    def test_prune_jobs_dry_run_and_delete(self):
+        job = AudioMIDI.objects.create(audio_filename="old.wav")
+        AudioMIDI.objects.filter(pk=job.pk).update(
+            created_at=timezone.now() - timedelta(days=10)
+        )
+        output = StringIO()
+
+        call_command("prune_jobs", "--days", "7", "--dry-run", stdout=output)
+        self.assertTrue(AudioMIDI.objects.filter(pk=job.pk).exists())
+        self.assertIn("Would delete 1 job", output.getvalue())
+
+        call_command("prune_jobs", "--days", "7", stdout=output)
+        self.assertFalse(AudioMIDI.objects.filter(pk=job.pk).exists())
 
 
 class ReadinessTests(TestCase):

@@ -67,6 +67,17 @@ uv run gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 2 --worker-class gthre
 
 For deploying to a vast.ai GPU instance behind the `pyaar.ai/transcribe/*` nginx proxy, see [`docs/vast-deploy.md`](docs/vast-deploy.md). Vast instances are containers themselves and cannot run Docker, so the runbook covers launching `redis-server`, `gunicorn`, and the `runworker` process directly under `uv`.
 
+### Retention
+
+Delete completed jobs and their audio/MIDI files after a retention window:
+
+```bash
+uv run python manage.py prune_jobs --days 7
+```
+
+Run this from cron/systemd or a scheduled job. Use `--dry-run` first to see how
+many records would be removed.
+
 ## API
 
 | Endpoint | Method | Description |

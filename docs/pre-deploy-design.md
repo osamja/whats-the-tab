@@ -19,6 +19,7 @@ Completed in the `pre-deploy-hardening` branch:
 - [x] Add upload size/content-type limits and audio-duration checks.
 - [x] Add per-IP Redis rate limits for uploads, transcriptions, and YouTube
   downloads, plus a `/transcribe/ready/` readiness endpoint.
+- [x] Add `prune_jobs` for retention cleanup.
 - [x] Fix the `youtube_audio_downloaded` status length, use `TextChoices`, and
   switch YouTube downloads to `yt-dlp`.
 - [x] Load `.env`, add `django.contrib.sites` and a default site migration,
