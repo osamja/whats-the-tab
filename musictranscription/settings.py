@@ -173,6 +173,10 @@ WEB_URL = os.getenv("WEB_URL", "http://localhost:8008")
 # When unset, /transcribe/_result/ rejects all requests.
 WORKER_SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 
+# Optional API key for client-facing transcription endpoints. When empty, the
+# endpoints remain open (subject to rate limits).
+TRANSCRIBE_API_KEY = os.getenv("TRANSCRIBE_API_KEY", "")
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',

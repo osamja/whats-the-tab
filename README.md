@@ -93,6 +93,10 @@ many records would be removed.
 | `/transcribe/_result/` | POST | Internal worker result callback (requires `X-Worker-Token`) |
 | `/transcribe/metrics/` | GET | Internal queue/Redis metrics |
 
+If `TRANSCRIBE_API_KEY` is set, every client-facing endpoint requires either
+`X-API-Key: <key>` or `Authorization: Bearer <key>`. The health/readiness
+endpoints and the internal worker callback remain open/protected separately.
+
 ### Example
 
 ```bash

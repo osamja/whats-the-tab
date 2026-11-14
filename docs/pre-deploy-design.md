@@ -32,7 +32,8 @@ Completed in the `pre-deploy-hardening` branch:
 - [x] Cache the inference model per worker process.
 - [x] Pad the final chunk with the log-mel silence floor instead of 0.0.
 - [ ] KV cache, chunk batching, and precision tuning.
-- [ ] Optional API-key/user ownership for jobs.
+- [x] Optional API-key gate for client-facing endpoints.
+- [ ] Per-user job ownership.
 - [ ] Account-test cleanup and CI worker-image build.
 
 ---

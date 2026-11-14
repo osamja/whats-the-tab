@@ -147,6 +147,35 @@ class ReadinessTests(TestCase):
         self.assertIn("error", response.json()["checks"]["redis"])
 
 
+@override_settings(TRANSCRIBE_API_KEY="test-api-key")
+class ApiKeyTests(TestCase):
+    def setUp(self):
+        self.job = AudioMIDI.objects.create(audio_filename="test.wav")
+
+    def test_client_endpoint_rejects_missing_api_key(self):
+        response = self.client.get(
+            reverse("audio_status", args=[self.job.id])
+        )
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_client_endpoint_accepts_x_api_key(self):
+        response = self.client.get(
+            reverse("audio_status", args=[self.job.id]),
+            HTTP_X_API_KEY="test-api-key",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_client_endpoint_accepts_bearer_token(self):
+        response = self.client.get(
+            reverse("audio_status", args=[self.job.id]),
+            HTTP_AUTHORIZATION="Bearer test-api-key",
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+
 @override_settings(WORKER_SHARED_SECRET="test-worker-secret")
 class ResultCallbackTests(TestCase):
     def setUp(self):

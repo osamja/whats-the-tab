@@ -50,6 +50,25 @@ def readiness(request):
     )
 
 
+def _api_request_is_authorized(request):
+    expected = settings.TRANSCRIBE_API_KEY
+    if not expected:
+        return True
+
+    provided = request.headers.get("X-API-Key", "")
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        provided = authorization[7:].strip()
+
+    return bool(provided) and hmac.compare_digest(provided, expected)
+
+
+def _api_unauthorized_response():
+    response = JsonResponse({"error": "Unauthorized"}, status=401)
+    response["WWW-Authenticate"] = 'Bearer realm="transcribe"'
+    return response
+
+
 def _rate_limit_response(request, action, limit):
     try:
         allowed, _ = check_rate_limit(request, action, limit=limit)
@@ -72,6 +91,9 @@ def _rate_limit_response(request, action, limit):
 
 @csrf_exempt
 def upload_audio(request):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     if request.method == "POST" and request.FILES.get("audio", False):
         limited = _rate_limit_response(
             request,
@@ -125,6 +147,9 @@ def upload_audio(request):
 
 @csrf_exempt
 def upload_from_youtube(request):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     if request.method == "POST":
         limited = _rate_limit_response(
             request,
@@ -172,6 +197,9 @@ def upload_from_youtube(request):
 
 @csrf_exempt
 def transcribe(request):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request method"}, status=400)
 
@@ -303,6 +331,9 @@ def result(request):
 
 
 def metrics(request):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     from .queue import get_queue_stats
 
     try:
@@ -314,6 +345,9 @@ def metrics(request):
 
 @csrf_exempt
 def audio_status(request, audio_midi_id):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     try:
         audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
         response_data = {
@@ -340,6 +374,9 @@ def audio_status(request, audio_midi_id):
 
 @csrf_exempt
 def get_midi(request, audio_midi_id):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     try:
         audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
@@ -362,6 +399,9 @@ def get_midi(request, audio_midi_id):
 
 @csrf_exempt
 def download_midi(request, audio_midi_id):
+    if not _api_request_is_authorized(request):
+        return _api_unauthorized_response()
+
     try:
         audio_midi = AudioMIDI.objects.get(pk=audio_midi_id)
 
