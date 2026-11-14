@@ -1,4 +1,3 @@
-import json
 import os
 import signal
 import requests
@@ -12,17 +11,17 @@ from django.core.management.base import BaseCommand
 
 from transcribeapp.queue import (
     claim_task,
-    get_redis,
     heartbeat,
     mark_completed,
     mark_failed,
     publish_progress,
+    reap_stale_tasks,
 )
 from transcribeapp.tasks import download_youtube_audio, transcribe_audio
 
 
 class Command(BaseCommand):
-    help = "Run a transcription worker that pulls tasks from Redis pub/sub"
+    help = "Run a transcription worker that pulls tasks from the Redis queue"
 
     def handle(self, *args, **options):
         self.web_url = settings.WEB_URL.rstrip("/")
@@ -33,43 +32,49 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, self._on_shutdown)
         signal.signal(signal.SIGINT, self._on_shutdown)
 
-        r = get_redis()
         self._start_heartbeat()
-
-        pubsub = r.pubsub()
-        pubsub.subscribe(settings.TASK_NEW_CHANNEL)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Worker {self.worker_id} listening on '{settings.TASK_NEW_CHANNEL}'..."
+                f"Worker {self.worker_id} polling '{settings.TASK_QUEUE_KEY}'..."
             )
         )
 
-        for message in pubsub.listen():
-            if self.shutting_down:
-                self._flush_processing()
-                break
+        last_reap = 0.0
+        while not self.shutting_down:
+            now = time.time()
+            if now - last_reap >= settings.TASK_REAP_INTERVAL:
+                try:
+                    reaped = reap_stale_tasks()
+                    if reaped:
+                        self.stdout.write(
+                            f"[{self.worker_id}] Reaped {reaped} stale task(s)"
+                        )
+                except Exception as e:
+                    self.stderr.write(
+                        f"[{self.worker_id}] Failed to reap stale tasks: {e}"
+                    )
+                last_reap = now
 
-            if message["type"] != "message":
+            try:
+                claimed = claim_task(self.worker_id)
+            except Exception as e:
+                self.stderr.write(f"[{self.worker_id}] Failed to claim task: {e}")
+                time.sleep(1)
                 continue
 
-            if message.get("channel") != settings.TASK_NEW_CHANNEL.encode():
+            if not claimed:
                 continue
 
-            task_id = (
-                message["data"].decode()
-                if isinstance(message["data"], bytes)
-                else message["data"]
-            )
-
-            state = claim_task()
+            task_id, state = claimed
             if not state:
                 continue
 
             self.current_task_id = task_id
+            task_type = state.get("payload", {}).get("type", "unknown")
 
             self.stdout.write(
-                f"[{self.worker_id}] Claimed task {task_id} ({state['payload']['type']})"
+                f"[{self.worker_id}] Claimed task {task_id} ({task_type})"
             )
 
             try:
@@ -79,6 +84,9 @@ class Command(BaseCommand):
                 mark_failed(task_id, str(e))
 
             self.current_task_id = None
+
+        if self.current_task_id:
+            self._flush_processing()
 
         self.stdout.write(self.style.WARNING(f"Worker {self.worker_id} shut down"))
 
@@ -102,7 +110,12 @@ class Command(BaseCommand):
         def beat():
             while True:
                 time.sleep(10)
-                heartbeat(self.worker_id, self.current_task_id)
+                try:
+                    heartbeat(self.worker_id, self.current_task_id)
+                except Exception as e:
+                    self.stderr.write(
+                        f"[{self.worker_id}] Heartbeat failed: {e}"
+                    )
 
         t = threading.Thread(target=beat, daemon=True)
         t.start()
@@ -154,11 +167,18 @@ class Command(BaseCommand):
     def _upload_result(self, task_id, status, file_path):
         url = f"{self.web_url}/transcribe/_result/"
         data = {"audio_midi_id": task_id, "task_type": status}
+        headers = {"X-Worker-Token": settings.WORKER_SHARED_SECRET}
 
         self.stdout.write(f"[{self.worker_id}] Uploading result to {url} ({status})")
 
         with open(file_path, "rb") as f:
-            resp = requests.post(url, data=data, files={"result_file": f}, timeout=60)
+            resp = requests.post(
+                url,
+                data=data,
+                files={"result_file": f},
+                headers=headers,
+                timeout=60,
+            )
             resp.raise_for_status()
 
         self.stdout.write(

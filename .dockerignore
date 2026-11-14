@@ -10,6 +10,8 @@ __pycache__/
 db.sqlite3
 docs/
 dataset/
+media/
+static/
 audios/
 midi/
 *.ipynb

@@ -139,6 +139,7 @@ dmypy.json
 # ignore the mt3 directory
 mt3/
 # Django/generated media and local assets
+media/
 audios/
 content/
 midis/

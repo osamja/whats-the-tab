@@ -26,7 +26,7 @@ def ensure_checkpoint(checkpoint_path=None):
         return checkpoint_path
 
     # Download checkpoint
-    print(f"Downloading checkpoint from GitHub Releases (~175 MB)...")
+    print("Downloading checkpoint from GitHub Releases (~175 MB)...")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:

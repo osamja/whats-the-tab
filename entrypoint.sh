@@ -1,7 +1,11 @@
 #!/bin/sh
 set -e
 
-python manage.py migrate --noinput
+# Run migrations here for simple/single-instance deployments. Set
+# RUN_MIGRATIONS=False when migrations are handled by a release job.
+if [ "${RUN_MIGRATIONS:-True}" = "True" ]; then
+  python manage.py migrate --noinput
+fi
 
 (
   while true; do

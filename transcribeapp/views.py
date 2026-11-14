@@ -1,8 +1,9 @@
+import hmac
 import os
 import uuid
+from urllib.parse import quote
 
 from django.conf import settings
-from django.core.files import File as DjangoFile
 from django.http import FileResponse, Http404, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
@@ -19,6 +20,29 @@ def health(request):
 def upload_audio(request):
     if request.method == "POST" and request.FILES.get("audio", False):
         audio_file = request.FILES["audio"]
+
+        if audio_file.size > settings.MAX_UPLOAD_BYTES:
+            return JsonResponse(
+                {
+                    "error": (
+                        f"File too large. Maximum upload size is "
+                        f"{settings.MAX_UPLOAD_BYTES} bytes."
+                    )
+                },
+                status=413,
+            )
+
+        content_type = (audio_file.content_type or "").lower()
+        if content_type and not (
+            content_type.startswith("audio/")
+            or content_type.startswith("video/")
+            or content_type == "application/octet-stream"
+        ):
+            return JsonResponse(
+                {"error": f"Unsupported audio content type: {content_type}"},
+                status=415,
+            )
+
         audio_filename = get_audio_filename()
 
         audio_midi = AudioMIDI.objects.create(
@@ -44,11 +68,12 @@ def upload_from_youtube(request):
         if not youtube_url:
             return JsonResponse({"error": "No YouTube URL provided"}, status=400)
 
+        audio_midi = None
         try:
             audio_midi = AudioMIDI.objects.create(
                 youtube_url=youtube_url,
                 audio_filename=f"{uuid.uuid4().hex}.mp4",
-                status="queued",
+                status=AudioMIDI.Status.QUEUED,
             )
 
             enqueue_task(
@@ -66,6 +91,10 @@ def upload_from_youtube(request):
                 }
             )
         except Exception as e:
+            if audio_midi is not None:
+                audio_midi.status = AudioMIDI.Status.FAILED
+                audio_midi.error_message = f"Failed to enqueue download: {e}"
+                audio_midi.save(update_fields=["status", "error_message"])
             return JsonResponse({"error": str(e)}, status=500)
 
     return JsonResponse({"error": "Invalid request method"}, status=400)
@@ -73,17 +102,34 @@ def upload_from_youtube(request):
 
 @csrf_exempt
 def transcribe(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Invalid request method"}, status=400)
+
     try:
-        if request.method == "POST":
-            audio_midi_id = request.POST["audio_midi_id"]
-            audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
+        audio_midi_id = request.POST["audio_midi_id"]
+        audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
 
-            audio_midi.status = "queued"
-            audio_midi.save()
+        if not audio_midi.audio_file:
+            return JsonResponse(
+                {
+                    "error": (
+                        "Audio is not ready yet. Wait for the YouTube download "
+                        "to finish before requesting transcription."
+                    )
+                },
+                status=409,
+            )
 
-            web_url = settings.WEB_URL.rstrip("/")
-            audio_url = f"{web_url}/media/{audio_midi.audio_file.name}"
+        audio_midi.status = AudioMIDI.Status.QUEUED
+        audio_midi.error_message = ""
+        audio_midi.save(update_fields=["status", "error_message"])
 
+        web_url = settings.WEB_URL.rstrip("/")
+        audio_url = (
+            f"{web_url}/media/{quote(audio_midi.audio_file.name, safe='/')}"
+        )
+
+        try:
             enqueue_task(
                 {
                     "type": "transcribe",
@@ -91,16 +137,23 @@ def transcribe(request):
                     "audio_url": audio_url,
                 }
             )
+        except Exception as e:
+            audio_midi.status = AudioMIDI.Status.FAILED
+            audio_midi.error_message = f"Failed to enqueue task: {e}"
+            audio_midi.save(update_fields=["status", "error_message"])
+            raise
 
-            return JsonResponse(
-                {
-                    "message": "Transcription queued. Check status endpoint for updates.",
-                    "audio_midi_id": audio_midi_id,
-                }
-            )
+        return JsonResponse(
+            {
+                "message": "Transcription queued. Check status endpoint for updates.",
+                "audio_midi_id": audio_midi_id,
+            }
+        )
 
     except KeyError as e:
         return JsonResponse({"error": f"Missing key in request data: {str(e)}"}, status=400)
+    except AudioMIDI.DoesNotExist:
+        return JsonResponse({"error": "AudioMIDI not found"}, status=404)
     except Exception as e:
         import traceback
 
@@ -110,8 +163,20 @@ def transcribe(request):
         )
 
 
+def _worker_request_is_authorized(request):
+    """Validate the shared worker secret on internal callbacks."""
+    expected = settings.WORKER_SHARED_SECRET
+    provided = request.headers.get("X-Worker-Token", "")
+    if not expected or not provided:
+        return False
+    return hmac.compare_digest(provided, expected)
+
+
 @csrf_exempt
 def result(request):
+    if not _worker_request_is_authorized(request):
+        return JsonResponse({"error": "Forbidden"}, status=403)
+
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request method"}, status=400)
 
@@ -122,25 +187,32 @@ def result(request):
     if not audio_midi_id or not result_file:
         return JsonResponse({"error": "Missing audio_midi_id or result_file"}, status=400)
 
+    valid_result_types = {
+        AudioMIDI.Status.COMPLETED,
+        AudioMIDI.Status.YOUTUBE_AUDIO_DOWNLOADED,
+    }
+    if task_type not in valid_result_types:
+        return JsonResponse({"error": "Invalid task_type"}, status=400)
+
     try:
         audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
     except AudioMIDI.DoesNotExist:
         return JsonResponse({"error": "AudioMIDI not found"}, status=404)
 
-    already_completed = task_type in ("completed", "youtube_audio_downloaded")
-    if already_completed and audio_midi.status == task_type:
-        if task_type == "completed" and audio_midi.midi_file:
+    if audio_midi.status == task_type:
+        if task_type == AudioMIDI.Status.COMPLETED and audio_midi.midi_file:
             return JsonResponse({"message": "Already processed", "audio_midi_id": audio_midi_id, "status": audio_midi.status})
-        if task_type == "youtube_audio_downloaded" and audio_midi.audio_file:
+        if task_type == AudioMIDI.Status.YOUTUBE_AUDIO_DOWNLOADED and audio_midi.audio_file:
             return JsonResponse({"message": "Already processed", "audio_midi_id": audio_midi_id, "status": audio_midi.status})
 
-    if task_type == "youtube_audio_downloaded":
+    if task_type == AudioMIDI.Status.YOUTUBE_AUDIO_DOWNLOADED:
         audio_midi.audio_file.save(audio_midi.audio_filename, result_file)
     else:
         midi_filename = f"{audio_midi.id}.midi"
         audio_midi.midi_file.save(midi_filename, result_file)
 
     audio_midi.status = task_type
+    audio_midi.error_message = ""
     audio_midi.save()
 
     return JsonResponse(

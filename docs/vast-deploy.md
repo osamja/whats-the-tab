@@ -1,17 +1,37 @@
 # Deploying whats-the-tab to a vast.ai instance
 
-This is the runbook for getting the API running on a fresh vast.ai GPU instance, behind the Linode nginx proxy at `pyaar.ai/transcribe/*`.
+This is the runbook for running the API on a fresh vast.ai GPU instance, behind
+the Linode nginx proxy at `pyaar.ai/transcribe/*`.
 
 ## Why vast.ai (and not Docker)
 
-vast.ai instances are themselves containers — there is no Docker daemon inside. You cannot `docker compose up`. You must run `redis-server`, `gunicorn`, and the dramatiq worker directly on the host with `uv`.
+vast.ai instances are themselves containers — there is no Docker daemon inside.
+You cannot `docker compose up` on a standard instance. You must run
+`redis-server`, `gunicorn`, and the transcription worker directly on the host
+with `uv`.
+
+> vast.ai also offers VM instances that support Docker. This runbook covers the
+> container-style instance, which is what the production proxy setup uses.
 
 ## Important gotchas
 
-- **`/app` is not a git repo.** Code is scp'd at instance creation time and drifts from `main` over time. Always sync from your local clone before launching, or you'll be running stale code (we hit this — the chunk-progress commit was missing for weeks).
-- **No process manager.** Nothing restarts services on reboot or crash. If the instance is rebooted, you must manually restart redis + gunicorn + dramatiq. `onstart.sh` is empty by default — populate it if you want auto-start.
-- **Port mapping.** Gunicorn binds to `8008` inside the container. vast maps it to a random external port (visible in the vast UI under "Open Ports"). Use the external mapped port everywhere outside the instance, including in nginx upstream config.
-- **Sync gunicorn (1 worker) blocks `/transcribe/status/`.** While `/transcribe/generate/` is running on the single sync worker, status polls queue behind it and nginx returns 504. Async mode (Dramatiq + Redis) is the fix — see below.
+- **`/app` is not a git repo.** Code is scp'd at instance creation time and
+  drifts from `main`. Sync from your local clone before launching, or you'll be
+  running stale code.
+- **No process manager.** Nothing restarts services on reboot or crash. If the
+  instance is rebooted, restart redis + gunicorn + the worker manually.
+  `onstart.sh` is empty by default — populate it if you want auto-start.
+- **Port mapping.** Gunicorn binds to `8008` inside the container. vast maps it
+  to a random external port (visible in the vast UI under "Open Ports"). Use the
+  external mapped port everywhere outside the instance, including in nginx
+  upstream config.
+- **Worker callbacks need a shared secret.** Set the same
+  `WORKER_SHARED_SECRET` for gunicorn and the worker. If it is unset,
+  `/transcribe/_result/` rejects all callbacks and every job fails.
+- **Media is not served by default when `DEBUG=False`.** Set
+  `SERVE_MEDIA=True` if the instance is serving `/media/` directly (this
+  runbook does), or put nginx/object storage in front of it and leave
+  `SERVE_MEDIA=False`.
 
 ## First-time setup
 
@@ -26,7 +46,8 @@ redis-server --daemonize yes --logfile /var/log/redis-server.log
 redis-cli ping   # should return PONG
 ```
 
-(systemd is not available inside vast containers, so the apt postinstall can't auto-start it — `--daemonize yes` is required.)
+(systemd is not available inside vast containers, so the apt postinstall can't
+auto-start it — `--daemonize yes` is required.)
 
 ### 2. Sync code from your local clone
 
@@ -34,63 +55,109 @@ From your laptop, in the whats-the-tab repo:
 
 ```bash
 scp -P <ssh_port> -r \
-  transcribeapp pytorch_mt3 musictranscription manage.py \
+  transcribeapp pytorch_mt3 musictranscription accounts manage.py \
+  pyproject.toml uv.lock \
   root@<vast_ip>:/app/
 ```
 
-Or sync only changed files if you know what they are. Check the running version against `git log` on your local clone if anything looks stale.
+Or sync only changed files if you know what they are. Check the running version
+against `git log` on your local clone if anything looks stale.
 
-### 3. Run migrations
+### 3. Install dependencies
+
+On the instance:
 
 ```bash
 cd /app
-IS_ASYNC=True REDIS_URL=redis://localhost:6379 \
-  uv run python manage.py migrate
+uv sync --frozen --no-dev --no-install-project --extra gpu
 ```
 
-### 4. Start gunicorn (async mode)
+### 4. Configure the environment
+
+Create `/app/.env` (or export these variables before each command). Keep the
+file readable only by root:
+
+```bash
+cat > /app/.env <<'EOF'
+DEBUG=False
+SECRET_KEY=<generate-a-new-secret>
+DATABASE_URL=<postgres-url-or-leave-unset-for-sqlite>
+REDIS_URL=redis://localhost:6379
+WEB_URL=http://127.0.0.1:8008
+WORKER_SHARED_SECRET=<generate-a-second-secret>
+SERVE_MEDIA=True
+ALLOWED_HOSTS=pyaar.ai,127.0.0.1,localhost
+EOF
+chmod 600 /app/.env
+```
+
+`SECRET_KEY` and `WORKER_SHARED_SECRET` must be different. Generate each with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(50))"
+```
+
+### 5. Run migrations
 
 ```bash
 cd /app
-DEBUG=False USE_PYTORCH=True IS_ASYNC=True REDIS_URL=redis://localhost:6379 \
-  nohup uv run gunicorn \
-    --bind 0.0.0.0:8008 \
-    --timeout 600 \
-    musictranscription.wsgi \
+uv run python manage.py migrate --noinput
+uv run python manage.py collectstatic --noinput
+```
+
+### 6. Start gunicorn
+
+```bash
+cd /app
+nohup uv run gunicorn \
+  --bind 0.0.0.0:8008 \
+  --workers 1 \
+  --threads 2 \
+  --worker-class gthread \
+  --timeout 300 \
+  musictranscription.wsgi \
   > /app/gunicorn.log 2>&1 &
 disown
 ```
 
-### 5. Start the dramatiq worker
+The web process handles HTTP, status polling, and media. It does not load the
+MT3 model.
+
+### 7. Start the transcription worker
 
 ```bash
 cd /app
-DEBUG=False USE_PYTORCH=True IS_ASYNC=True REDIS_URL=redis://localhost:6379 \
-  nohup uv run python manage.py rundramatiq \
-    --processes 1 --threads 1 \
-  > /app/dramatiq.log 2>&1 &
+nohup uv run python manage.py runworker \
+  > /app/worker.log 2>&1 &
 disown
 ```
 
-### 6. Verify
+The worker polls the Redis queue, downloads audio from `WEB_URL`, runs GPU
+inference, posts the result back with `X-Worker-Token`, and publishes progress.
+It also reaps tasks left behind by dead workers.
+
+### 8. Verify
 
 ```bash
-ps -ef | grep -E "redis|gunicorn|dramatiq" | grep -v grep
-# Should see: redis-server, gunicorn master+worker, dramatiq master+worker
+ps -ef | grep -E "redis|gunicorn|runworker" | grep -v grep
+# Should see: redis-server, gunicorn master+worker, runworker
 ```
 
 From outside the instance (using the vast-mapped external port for `8008`):
 
 ```bash
-curl -H "Host: pyaar.ai" http://<vast_ip>:<ext_port_for_8008>/transcribe/upload/
-# {"error": "Failed to upload file"}   ← endpoint reachable, expected GET-on-POST
+curl -H "Host: pyaar.ai" http://<vast_ip>:<ext_port_for_8008>/transcribe/
+# {"status": "ok"}
 ```
 
-The `Host: pyaar.ai` header is required because direct vast IPs are not in `ALLOWED_HOSTS` — without it Django returns 400. Through the Linode nginx proxy this is automatic.
+The `Host: pyaar.ai` header is required because direct vast IPs are not in
+`ALLOWED_HOSTS`. Through the Linode nginx proxy this is automatic.
 
 ## Wiring up the Linode nginx proxy
 
-On the Linode (`ssh -p 44444 sammy@173.255.217.39`), edit `~/workspace/nginx_sammyjaved_proxy/nginx.conf` and update the `vast-ai-backend` upstream to the new instance:
+On the Linode (`ssh -p 44444 sammy@173.255.217.39`), edit
+`~/workspace/nginx_sammyjaved_proxy/nginx.conf` and update the
+`vast-ai-backend` upstream to the new instance:
 
 ```nginx
 upstream vast-ai-backend {
@@ -99,7 +166,10 @@ upstream vast-ai-backend {
 }
 ```
 
-Then **fully restart** the nginx container — `nginx -s reload` is not sufficient when the upstream IP changes (see [`nginx_sammyjaved_proxy/NOTES.md`](https://github.com/osamja/nginx_sammyjaved_proxy) on the Linode for details):
+Then **fully restart** the nginx container — `nginx -s reload` is not
+sufficient when the upstream IP changes (see
+[`nginx_sammyjaved_proxy/NOTES.md`](https://github.com/osamja/nginx_sammyjaved_proxy)
+on the Linode for details):
 
 ```bash
 cd ~/workspace/nginx_sammyjaved_proxy
@@ -109,8 +179,7 @@ docker compose restart my-site-proxy
 Verify end-to-end through the public domain:
 
 ```bash
-curl https://pyaar.ai/transcribe/upload/
-# {"error": "Failed to upload file"}
+curl https://pyaar.ai/transcribe/
 ```
 
 ## Debugging
@@ -119,16 +188,19 @@ curl https://pyaar.ai/transcribe/upload/
 |---|---|
 | `https://pyaar.ai/transcribe/*` hangs/504 after upstream change | nginx held stale upstream state. `docker compose restart my-site-proxy` on the Linode. |
 | `400 Bad Request` from a direct vast curl | Missing `Host: pyaar.ai` header (vast IP isn't in `ALLOWED_HOSTS`). |
-| `/transcribe/status/<id>/` returns 504 mid-transcription | Running in sync mode with one gunicorn worker. Switch to `IS_ASYNC=True` and start dramatiq. |
+| Every job fails with `403` at `_result` | `WORKER_SHARED_SECRET` is missing or does not match between web and worker. |
+| `/media/...` returns 404 | `SERVE_MEDIA=False` and no nginx/object-storage layer is serving media. Set `SERVE_MEDIA=True` or configure media serving. |
+| `/transcribe/status/<id>/` never leaves `queued` | Worker is not running, or cannot reach Redis. Check `/app/worker.log` and `redis-cli ping`. |
 | `current_chunk`/`total_chunks` always 0 in status response | Code on `/app` is older than commit `9788335` ("Add real-time transcription progress tracking"). Re-sync `transcribeapp/` and `pytorch_mt3/standalone_inference.py`, run migrations, restart workers. |
-| `ModuleNotFoundError` after restart | Likely uv venv drift; `uv sync --frozen --no-dev --no-install-project` from `/app`. |
+| `ModuleNotFoundError` after restart | Likely uv venv drift; `uv sync --frozen --no-dev --no-install-project --extra gpu` from `/app`. |
 
 ## Process layout reference
 
 | Process | Pid pattern | Purpose |
 |---|---|---|
-| `redis-server *:6379` | 1 | Dramatiq broker |
+| `redis-server *:6379` | 1 | Queue and pub/sub broker |
 | `gunicorn ... musictranscription.wsgi` | master + 1 worker | HTTP API on `:8008` |
-| `dramatiq ... transcribeapp.tasks` | master + 1 worker | Long-running transcription jobs |
+| `python manage.py runworker` | 1 | Long-running transcription jobs, progress, result upload |
 
-GPU memory usage is dominated by the dramatiq worker (which loads the MT3 PyTorch model on each call). The gunicorn worker only handles fast DB-backed endpoints (`/upload/`, `/status/`) and does not need GPU memory.
+GPU memory usage is dominated by the worker. The gunicorn worker only handles
+fast DB-backed endpoints (`/upload/`, `/status/`) and does not need GPU memory.

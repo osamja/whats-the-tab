@@ -13,8 +13,27 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env for local development. Existing environment variables win, so
+# container/orchestrator configuration is not overridden.
+load_dotenv(BASE_DIR / ".env")
+
+
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in ("true", "1", "t", "yes", "on")
+
+
+def env_list(name, default=""):
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -25,26 +44,32 @@ if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is required")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "t")
+DEBUG = env_bool("DEBUG", False)
 
 # Frontend URL for redirects
-FRONTEND_URL = 'https://pyaar.ai'
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://pyaar.ai")
 
-ALLOWED_HOSTS = [
-    'pyaar.ai',
-    'zubyj.com',
-    '127.0.0.1',
-    'localhost',
-    'web',
-] + [h.strip() for h in os.getenv('EXTRA_ALLOWED_HOSTS', '').split(',') if h.strip()]
+ALLOWED_HOSTS = env_list(
+    "ALLOWED_HOSTS",
+    "pyaar.ai,zubyj.com,127.0.0.1,localhost,web",
+) + env_list("EXTRA_ALLOWED_HOSTS")
 
-CSRF_TRUSTED_ORIGINS = [
-    'http://127.0.0.1:8000',
-    'https://pyaar.ai',
-    'http://localhost:3000',
-] + [o.strip() for o in os.getenv('EXTRA_CSRF_ORIGINS', '').split(',') if o.strip()]
+CSRF_TRUSTED_ORIGINS = env_list(
+    "CSRF_TRUSTED_ORIGINS",
+    "http://127.0.0.1:8000,https://pyaar.ai,http://localhost:3000",
+) + env_list("EXTRA_CSRF_ORIGINS")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Production security toggles. Enable these when serving over HTTPS.
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", False)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", False)
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", False)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
 
 
 # Application definition
@@ -56,6 +81,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',
     'transcribeapp',
     'django_cleanup.apps.CleanupConfig',
     'corsheaders',
@@ -71,11 +97,10 @@ INSTALLED_APPS = [
     'accounts',  # Add the accounts app
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "https://pyaar.ai",
-    "http://pyaar.ai",
-] + [o.strip() for o in os.getenv('EXTRA_CORS_ORIGINS', '').split(',') if o.strip()]
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    "http://localhost:3000,https://pyaar.ai,http://pyaar.ai",
+) + env_list("EXTRA_CORS_ORIGINS")
 
 CORS_ALLOW_CREDENTIALS = True  # Allow credentials (cookies, authorization headers)
 
@@ -127,12 +152,26 @@ TASK_COMPLETED_CHANNEL = "task:completed"
 TASK_FAILED_CHANNEL = "task:failed"
 
 TASK_PROCESSING_TIMEOUT = int(os.getenv("TASK_PROCESSING_TIMEOUT", "300"))
+TASK_MAX_RETRIES = int(os.getenv("TASK_MAX_RETRIES", "3"))
+TASK_POLL_TIMEOUT = int(os.getenv("TASK_POLL_TIMEOUT", "5"))
+TASK_REAP_INTERVAL = int(os.getenv("TASK_REAP_INTERVAL", "30"))
+TASK_RESULT_TTL = int(os.getenv("TASK_RESULT_TTL", "604800"))
+TASK_FAILED_TTL = int(os.getenv("TASK_FAILED_TTL", "86400"))
+TASK_FAILED_MAX = int(os.getenv("TASK_FAILED_MAX", "1000"))
+
+MAX_AUDIO_DURATION_SECONDS = int(os.getenv("MAX_AUDIO_DURATION_SECONDS", "600"))
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(25 * 1024 * 1024)))
 
 WEB_URL = os.getenv("WEB_URL", "http://localhost:8008")
+
+# Shared secret used by the worker when posting results back to the web app.
+# When unset, /transcribe/_result/ rejects all requests.
+WORKER_SHARED_SECRET = os.getenv("WORKER_SHARED_SECRET", "")
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -210,10 +249,16 @@ ACCOUNT_PASSWORD_RESET_VERIFY = True
 ACCOUNT_PASSWORD_RESET_VERIFY_URL = 'api/auth/password/reset/verify/{uid}/{token}'
 
 # Email settings
-EMAIL_BACKEND = 'musictranscription.email_backends.mailgun_backend.MailgunEmailBackend'
-MAILGUN_API_KEY = os.getenv('MAILGUN_API_KEY', '')
-MAILGUN_DOMAIN = os.getenv('MAILGUN_DOMAIN', 'mg.pyaar.ai')
-DEFAULT_FROM_EMAIL = 'support@pyaar.ai'
+MAILGUN_API_KEY = os.getenv("MAILGUN_API_KEY", "")
+MAILGUN_DOMAIN = os.getenv("MAILGUN_DOMAIN", "mg.pyaar.ai")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "support@pyaar.ai")
+
+if os.getenv("EMAIL_BACKEND"):
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND")
+elif MAILGUN_API_KEY:
+    EMAIL_BACKEND = "musictranscription.email_backends.mailgun_backend.MailgunEmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 ACCOUNT_SIGNUP_REDIRECT_URL = "/"
 LOGIN_REDIRECT_URL = "/"
@@ -240,7 +285,12 @@ else:
     }
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR
+MEDIA_ROOT = BASE_DIR / "media"
+
+# Serve /media/ through Django. Keep this disabled in production when nginx or
+# object storage is responsible for media files. DEBUG also enables it for
+# local development.
+SERVE_MEDIA = os.getenv("SERVE_MEDIA", "False").lower() in ("true", "1", "t")
 
 
 # Password validation
@@ -276,10 +326,43 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "static"
 
-STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
+    },
+}
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "default": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "default",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": os.getenv("LOG_LEVEL", "INFO"),
+    },
+}

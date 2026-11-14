@@ -33,8 +33,15 @@ At minimum you need `SECRET_KEY` set. See `.env.example` for all options.
 ```bash
 uv sync --frozen --no-dev --no-install-project
 uv run python manage.py migrate
-USE_PYTORCH=True IS_ASYNC=False uv run python manage.py runserver 0.0.0.0:8008
+DEBUG=True uv run python manage.py runserver 0.0.0.0:8008
 ```
+
+Uploaded audio and generated MIDI files are stored under `media/`.
+
+Transcription jobs require Redis (`REDIS_URL`) and a worker process:
+`uv run python manage.py runworker`. A Redis server is included in the Docker
+Compose setup; for bare-metal development, start one locally or point
+`REDIS_URL` at a managed instance.
 
 ### Docker
 
@@ -48,14 +55,17 @@ The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar cont
 
 ```bash
 uv run python manage.py migrate
+uv run python manage.py collectstatic --noinput
 uv run gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 2 --worker-class gthread --timeout 300 musictranscription.wsgi
 ```
 
-- `gthread` with 2 threads allows `/transcribe/status/` polling while `/transcribe/generate/` runs GPU inference.
-- CUDA releases the GIL during kernel execution, so the second thread can handle status polls concurrently.
-- 1 worker keeps GPU memory usage low (model is loaded once).
+- The web process only handles HTTP, status polling, and media; it does not perform GPU inference.
+- The GPU worker runs separately: `uv run python manage.py runworker`.
+- `WORKER_SHARED_SECRET` must be identical in the web and worker environments; it authenticates worker result callbacks.
+- Django does not serve `/media/` unless `DEBUG=True` or `SERVE_MEDIA=True`. In production, serve media through nginx or object storage; only set `SERVE_MEDIA=True` for simple deployments that need Django to serve it.
+- `runworker` polls Redis for jobs, writes real-time progress, reaps stale jobs from dead workers, and retries interrupted jobs up to `TASK_MAX_RETRIES`.
 
-For deploying to a vast.ai GPU instance behind the `pyaar.ai/transcribe/*` nginx proxy (the production setup), see [`docs/vast-deploy.md`](docs/vast-deploy.md). vast instances are containers themselves and cannot run Docker, so the runbook covers launching `redis-server`, `gunicorn`, and the dramatiq worker directly under `uv` with `IS_ASYNC=True`.
+For deploying to a vast.ai GPU instance behind the `pyaar.ai/transcribe/*` nginx proxy, see [`docs/vast-deploy.md`](docs/vast-deploy.md). Vast instances are containers themselves and cannot run Docker, so the runbook covers launching `redis-server`, `gunicorn`, and the `runworker` process directly under `uv`.
 
 ## API
 
@@ -92,7 +102,7 @@ curl -o output.midi http://127.0.0.1:8008/transcribe/download_midi/<ID>/
 - **Spectrogram:** `pytorch_mt3/pytorch_spectrograms.py` — log-mel spectrogram matching MT3's spectral_ops
 - **Decoding:** `pytorch_mt3/mt3_decoding/` — vendored from MT3, TF/seqio/t5 dependencies removed
 - **Checkpoint conversion:** `pytorch_mt3/convert_jax_to_pytorch.py` — JAX T5X to PyTorch state dict
-- **Async tasks:** Dramatiq + Redis (optional, controlled by `IS_ASYNC` env var)
+- **Async tasks:** Redis-backed queue + `runworker` management command
 
 ## Acknowledgments
 

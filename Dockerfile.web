@@ -17,7 +17,9 @@ RUN uv pip install --system -r requirements-web.txt
 
 COPY . .
 
-RUN mkdir -p audios midi && chmod +x entrypoint.sh
+RUN mkdir -p media/audios media/midi \
+    && chmod +x entrypoint.sh \
+    && SECRET_KEY=build-only python manage.py collectstatic --noinput
 
 EXPOSE 8008
 
