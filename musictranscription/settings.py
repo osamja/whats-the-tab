@@ -301,6 +301,16 @@ MEDIA_ROOT = BASE_DIR / "media"
 # local development.
 SERVE_MEDIA = os.getenv("SERVE_MEDIA", "False").lower() in ("true", "1", "t")
 
+# S3-compatible object storage for audio/MIDI. Configure these for Cloudflare
+# R2 (endpoint_url=https://<account>.r2.cloudflarestorage.com) or AWS S3.
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "")
+AWS_S3_ENDPOINT_URL = os.getenv("AWS_S3_ENDPOINT_URL", "")
+AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME", "auto")
+AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "")
+AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+AWS_S3_ADDRESSING_STYLE = os.getenv("AWS_S3_ADDRESSING_STYLE", "virtual")
+AWS_QUERYSTRING_EXPIRE = int(os.getenv("AWS_QUERYSTRING_EXPIRE", "3600"))
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -338,9 +348,31 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
 
+if AWS_STORAGE_BUCKET_NAME:
+    _default_storage_backend = "storages.backends.s3boto3.S3Boto3Storage"
+    _default_storage_options = {
+        "bucket_name": AWS_STORAGE_BUCKET_NAME,
+        "region_name": AWS_S3_REGION_NAME,
+        "addressing_style": AWS_S3_ADDRESSING_STYLE,
+        "querystring_auth": True,
+        "querystring_expire": AWS_QUERYSTRING_EXPIRE,
+        "file_overwrite": False,
+        "default_acl": None,
+    }
+    if AWS_S3_ENDPOINT_URL:
+        _default_storage_options["endpoint_url"] = AWS_S3_ENDPOINT_URL
+    if AWS_ACCESS_KEY_ID:
+        _default_storage_options["access_key"] = AWS_ACCESS_KEY_ID
+    if AWS_SECRET_ACCESS_KEY:
+        _default_storage_options["secret_key"] = AWS_SECRET_ACCESS_KEY
+else:
+    _default_storage_backend = "django.core.files.storage.FileSystemStorage"
+    _default_storage_options = {}
+
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": _default_storage_backend,
+        "OPTIONS": _default_storage_options,
     },
     "staticfiles": {
         "BACKEND": (

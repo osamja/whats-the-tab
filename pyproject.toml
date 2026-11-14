@@ -11,6 +11,7 @@ dependencies = [
   "django-allauth>=0.63,<1",
   "djangorestframework>=3.15,<4",
   "dj-rest-auth>=6.0,<7",
+  "django-storages[s3]>=1.14,<2",
   "redis>=5,<6",
   "gunicorn>=22,<23",
   "whitenoise>=6.6,<7",

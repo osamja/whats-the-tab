@@ -1,10 +1,9 @@
 import hmac
 import os
 import uuid
-from urllib.parse import quote
 
 from django.conf import settings
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import AudioMIDI
@@ -230,10 +229,9 @@ def transcribe(request):
         audio_midi.error_message = ""
         audio_midi.save(update_fields=["status", "error_message"])
 
-        web_url = settings.WEB_URL.rstrip("/")
-        audio_url = (
-            f"{web_url}/media/{quote(audio_midi.audio_file.name, safe='/')}"
-        )
+        audio_url = audio_midi.audio_file.url
+        if not audio_url.startswith(("http://", "https://")):
+            audio_url = f"{settings.WEB_URL.rstrip('/')}{audio_url}"
 
         try:
             enqueue_task(
@@ -383,6 +381,10 @@ def get_midi(request, audio_midi_id):
         if not audio_midi.midi_file:
             raise Http404("No MIDI file found for this transcription.")
 
+        midi_url = audio_midi.midi_file.url
+        if midi_url.startswith(("http://", "https://")):
+            return HttpResponseRedirect(midi_url)
+
         return FileResponse(
             audio_midi.midi_file.open(),
             content_type="audio/midi",
@@ -407,6 +409,10 @@ def download_midi(request, audio_midi_id):
 
         if not audio_midi.midi_file:
             raise Http404("No MIDI file found for this transcription.")
+
+        midi_url = audio_midi.midi_file.url
+        if midi_url.startswith(("http://", "https://")):
+            return HttpResponseRedirect(midi_url)
 
         return FileResponse(
             audio_midi.midi_file.open(),

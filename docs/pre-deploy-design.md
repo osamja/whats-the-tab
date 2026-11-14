@@ -28,7 +28,8 @@ Completed in the `pre-deploy-hardening` branch:
 - [x] Update the README, Vast runbook, system design, and PyTorch README.
 - [x] Add `transcribeapp` tests for media scoping, callback auth, upload
   limits, status handling, queue claim attribution, and reaping.
-- [ ] Vast serverless worker image, dispatcher, and R2/S3 media.
+- [x] Add optional S3/R2 storage with presigned URLs for media.
+- [ ] Vast serverless worker image and dispatcher.
 - [x] Cache the inference model per worker process.
 - [x] Pad the final chunk with the log-mel silence floor instead of 0.0.
 - [ ] KV cache, chunk batching, and precision tuning.

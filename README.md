@@ -51,6 +51,14 @@ docker compose up --build
 
 The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar container.
 
+### Media storage
+
+By default, audio and MIDI files live under `media/` (Docker Compose uses a
+named volume). For a web tier and GPU workers on different hosts, configure an
+S3-compatible bucket such as Cloudflare R2 with `AWS_STORAGE_BUCKET_NAME` and
+the related settings in `.env.example`. Files are served with time-limited
+presigned URLs, so workers never need shared filesystem access.
+
 ### Production deployment
 
 ```bash
