@@ -25,6 +25,8 @@ Completed in the `pre-deploy-hardening` branch:
 - [x] Load `.env`, add `django.contrib.sites` and a default site migration,
   environment-driven hosts/origins, HTTPS toggles, WhiteNoise/static handling,
   console logging, and a migration toggle.
+- [x] Build the web image from `uv.lock` and remove the duplicated
+  `requirements-web.txt`.
 - [x] Update the README, Vast runbook, system design, and PyTorch README.
 - [x] Add `transcribeapp` tests for media scoping, callback auth, upload
   limits, status handling, queue claim attribution, and reaping.

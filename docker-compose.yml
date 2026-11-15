@@ -51,6 +51,7 @@ services:
         condition: service_healthy
 
   worker:
+    profiles: ["gpu"]
     build:
       context: .
       dockerfile: Dockerfile

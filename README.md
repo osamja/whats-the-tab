@@ -46,7 +46,11 @@ Compose setup; for bare-metal development, start one locally or point
 ### Docker
 
 ```bash
-docker compose up --build
+# Web, Postgres, and Redis
+docker compose up --build postgres redis web
+
+# Add the GPU transcription worker
+docker compose --profile gpu up --build
 ```
 
 The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar container.
