@@ -59,6 +59,15 @@ The GPU profile requires the NVIDIA Container Toolkit and a configured Docker
 GPU runtime. Without it, run the web stack only or run the worker directly with
 `uv run python manage.py runworker`.
 
+The worker image can also be built and pushed to GHCR with the
+`Worker Image` GitHub Actions workflow (`.github/workflows/worker-image.yml`),
+or manually:
+
+```bash
+docker build -f Dockerfile -t ghcr.io/osamja/whats-the-tab-worker:latest .
+docker push ghcr.io/osamja/whats-the-tab-worker:latest
+```
+
 ### Media storage
 
 By default, audio and MIDI files live under `media/` (Docker Compose uses a
