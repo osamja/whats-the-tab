@@ -4,7 +4,6 @@ This module provides inference without requiring full JAX/T5X installation.
 """
 
 import math
-import os
 import sys
 import torch
 import numpy as np
@@ -282,7 +281,7 @@ if __name__ == "__main__":
     # Transcribe
     result = model.transcribe_file(audio_file, output_midi)
 
-    print(f"\n✓ Transcription complete!")
+    print("\n✓ Transcription complete!")
     print(f"  Total chunks: {result['num_chunks']}")
     print(f"  Total tokens: {sum(len(t) for t in result['tokens'])}")
 

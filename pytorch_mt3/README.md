@@ -56,6 +56,8 @@ See `standalone_inference.py` for the full encode/decode pipeline.
 - Checkpoint: ~175 MB
 - GPU memory: ~2 GB
 - Inference speed: about 0.5x real-time on an RTX 4090
+- Decoding uses an incremental K/V cache by default; `generate(..., use_cache=False)`
+  keeps the old full-prefix path for parity checks.
 
 ## Not in git
 

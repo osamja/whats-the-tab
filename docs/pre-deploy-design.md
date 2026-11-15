@@ -37,7 +37,9 @@ Completed in the `pre-deploy-hardening` branch:
   image builds.
 - [x] Cache the inference model per worker process.
 - [x] Pad the final chunk with the log-mel silence floor instead of 0.0.
-- [ ] KV cache, chunk batching, and precision tuning.
+- [x] Add an incremental K/V cache for decoder generation; token output
+  matches the uncached path exactly on the local RTX 4090 test.
+- [ ] Chunk batching and precision tuning.
 - [x] Optional API-key gate for client-facing endpoints.
 - [ ] Per-user job ownership.
 - [ ] Account-test cleanup and CI worker-image build.
