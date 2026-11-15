@@ -55,6 +55,10 @@ docker compose --profile gpu up --build
 
 The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar container.
 
+The GPU profile requires the NVIDIA Container Toolkit and a configured Docker
+GPU runtime. Without it, run the web stack only or run the worker directly with
+`uv run python manage.py runworker`.
+
 ### Media storage
 
 By default, audio and MIDI files live under `media/` (Docker Compose uses a
