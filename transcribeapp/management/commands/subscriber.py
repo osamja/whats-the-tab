@@ -49,7 +49,9 @@ class Command(BaseCommand):
         )
 
         for message in pubsub.listen():
-            if message["type"] != "message":
+            # Pattern subscriptions arrive as "pmessage"; regular channel
+            # subscriptions arrive as "message".
+            if message["type"] not in ("message", "pmessage"):
                 continue
 
             channel = (

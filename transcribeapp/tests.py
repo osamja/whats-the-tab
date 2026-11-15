@@ -235,6 +235,23 @@ class ResultCallbackTests(TestCase):
         self.assertEqual(audio_midi.status, AudioMIDI.Status.COMPLETED)
         self.assertTrue(audio_midi.midi_file)
 
+    def test_result_marks_all_chunks_complete(self):
+        audio_midi = AudioMIDI.objects.create(
+            audio_filename="test.wav",
+            total_chunks=3,
+            current_chunk=1,
+        )
+
+        response = self._post_result(
+            audio_midi,
+            AudioMIDI.Status.COMPLETED,
+            token="test-worker-secret",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        audio_midi.refresh_from_db()
+        self.assertEqual(audio_midi.current_chunk, 3)
+
     def test_result_accepts_youtube_downloaded_audio(self):
         audio_midi = AudioMIDI.objects.create(
             audio_filename="youtube.mp4",

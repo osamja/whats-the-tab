@@ -317,6 +317,13 @@ def result(request):
 
     audio_midi.status = task_type
     audio_midi.error_message = ""
+    if (
+        task_type == AudioMIDI.Status.COMPLETED
+        and audio_midi.total_chunks
+    ):
+        # The final progress pub/sub event can be lost during a subscriber
+        # restart. Completion always means every chunk is done.
+        audio_midi.current_chunk = audio_midi.total_chunks
     audio_midi.save()
 
     return JsonResponse(

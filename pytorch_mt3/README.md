@@ -10,14 +10,21 @@ GPU transcription worker.
 - `pytorch_model.py` — MT3 model architecture in PyTorch
 - `pytorch_spectrograms.py` — audio preprocessing and spectrogram extraction
 - `standalone_inference.py` — standalone inference wrapper and vocabulary decoding
-- `download_checkpoint.py` — downloads the converted checkpoint if missing
+- `download_checkpoint.py` — downloads/prepares the converted checkpoint
+- `convert_jax_to_pytorch.py` — converts the original T5X checkpoint
+- `prepare_checkpoint.py` — downloads the public JAX checkpoint and converts it
 - `mt3_decoding/` — vendored MT3 decoding modules (no TensorFlow/seqio/t5 deps)
 
 ### Checkpoint
 
 `mt3_pytorch_checkpoint.pt` is the converted model weights (about 175 MB). It is
-not committed to git and is downloaded on first use if missing. For production
-workers, bake the checkpoint into the image instead of downloading at runtime.
+not committed to git and is prepared on first use if missing.
+
+The original pre-converted GitHub release is no longer published. If that
+download fails, `download_checkpoint.py` falls back to downloading the public
+T5X checkpoint from `gs://mt3/checkpoints/mt3/` and converting it locally with
+`convert_jax_to_pytorch.py`. For production workers, bake the checkpoint into
+the image instead of doing this at request time.
 
 ## Standalone usage
 

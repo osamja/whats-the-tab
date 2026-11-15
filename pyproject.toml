@@ -30,6 +30,7 @@ gpu = [
   "torchaudio>=2.3,<3",
   "torchcodec>=0.10,<0.11",
   "numba>=0.61,<1",
+  "zarr>=2,<4",
 ]
 
 [tool.uv]

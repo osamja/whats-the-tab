@@ -16,7 +16,7 @@ A music transcription API that converts audio to MIDI, built on a from-scratch P
 - Python 3.11+
 - [uv](https://github.com/astral-sh/uv) package manager
 - GPU with 8GB+ VRAM (GTX 1080 or better) for inference
-- PyTorch model checkpoint: `pytorch_mt3/mt3_pytorch_checkpoint.pt`
+- PyTorch model checkpoint: `pytorch_mt3/mt3_pytorch_checkpoint.pt` (auto-downloaded/converted if missing)
 
 ### Environment variables
 

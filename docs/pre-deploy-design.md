@@ -32,6 +32,9 @@ Completed in the `pre-deploy-hardening` branch:
   limits, status handling, queue claim attribution, and reaping.
 - [x] Add optional S3/R2 storage with presigned URLs for media.
 - [ ] Vast serverless worker image and dispatcher.
+- [x] Add a reproducible checkpoint fallback: the old GitHub release is 404,
+  so the worker now downloads the public T5X checkpoint and converts it during
+  image builds.
 - [x] Cache the inference model per worker process.
 - [x] Pad the final chunk with the log-mel silence floor instead of 0.0.
 - [ ] KV cache, chunk batching, and precision tuning.

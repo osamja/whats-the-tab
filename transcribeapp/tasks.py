@@ -68,7 +68,8 @@ def transcribe_audio(audio_filepath, output_dir, progress_callback=None):
     import note_seq
     import torchaudio
     from django.conf import settings
-    from .ml_pytorch import load_audio, SAMPLE_RATE
+    from pytorch_mt3.pytorch_spectrograms import load_audio
+    from .ml_pytorch import SAMPLE_RATE
 
     max_duration = settings.MAX_AUDIO_DURATION_SECONDS
 
