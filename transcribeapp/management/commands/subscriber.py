@@ -1,5 +1,4 @@
 import json
-import time
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
@@ -50,7 +49,9 @@ class Command(BaseCommand):
         )
 
         for message in pubsub.listen():
-            if message["type"] != "message":
+            # Pattern subscriptions arrive as "pmessage"; regular channel
+            # subscriptions arrive as "message".
+            if message["type"] not in ("message", "pmessage"):
                 continue
 
             channel = (

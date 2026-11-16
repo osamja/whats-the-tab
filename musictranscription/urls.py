@@ -18,7 +18,6 @@ from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.static import serve
-from dj_rest_auth.views import PasswordResetConfirmView
 from accounts.views import (
     CustomConfirmEmailView,
     CustomPasswordResetFromKeyView,
@@ -56,6 +55,17 @@ urlpatterns = [
     path('api/auth/email/resend-verification/',
          ResendEmailVerificationView.as_view(),
          name='account_resend_verification'),
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]
+
+# Django's static file serving is for development and simple deployments only.
+# In production, put nginx or object storage in front of MEDIA_ROOT and leave
+# SERVE_MEDIA=False.
+if settings.DEBUG or settings.SERVE_MEDIA:
+    urlpatterns += [
+        re_path(
+            r'^media/(?P<path>.*)$',
+            serve,
+            {'document_root': settings.MEDIA_ROOT},
+        ),
+    ]
 

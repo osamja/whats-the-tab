@@ -6,7 +6,7 @@ easier integration with PyTorch-based pipelines.
 """
 
 import math
-from typing import Optional, Tuple
+from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -87,9 +87,9 @@ class FixedPositionalEncoding(nn.Module):
 
         self.register_buffer('pe', pe.unsqueeze(0))  # [1, max_len, emb_dim]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, offset: int = 0) -> torch.Tensor:
         seq_len = x.size(1)
-        return x + self.pe[:, :seq_len, :]
+        return x + self.pe[:, offset:offset + seq_len, :]
 
 
 class MultiHeadAttention(nn.Module):
@@ -122,26 +122,49 @@ class MultiHeadAttention(nn.Module):
     def forward(
         self,
         query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
+        key: Optional[torch.Tensor] = None,
+        value: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+        past_key: Optional[torch.Tensor] = None,
+        past_value: Optional[torch.Tensor] = None,
+        use_cache: bool = False,
+    ):
         """
         Args:
             query: [batch, seq_len, emb_dim]
-            key: [batch, seq_len, emb_dim]
-            value: [batch, seq_len, emb_dim]
+            key: [batch, seq_len, emb_dim], or None when using a complete cache
+            value: [batch, seq_len, emb_dim], or None when using a complete cache
             attention_mask: Optional [batch, 1, seq_len, seq_len] or broadcastable
+            past_key: Cached keys [batch, heads, past_len, head_dim]
+            past_value: Cached values [batch, heads, past_len, head_dim]
+            use_cache: Return the present key/value tensors
 
         Returns:
-            Output tensor [batch, seq_len, emb_dim]
+            Output tensor [batch, seq_len, emb_dim], or
+            (output, present_key, present_value) when use_cache=True.
         """
         batch_size = query.size(0)
 
         # Project and reshape to [batch, num_heads, seq_len, head_dim]
-        q = self.q_proj(query).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        k = self.k_proj(key).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        v = self.v_proj(value).view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        q = self.q_proj(query).view(
+            batch_size, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+
+        if key is None and value is None and past_key is not None:
+            # Cross-attention after the first step: reuse the full cached K/V.
+            k = past_key
+            v = past_value
+        else:
+            k = self.k_proj(key).view(
+                batch_size, -1, self.num_heads, self.head_dim
+            ).transpose(1, 2)
+            v = self.v_proj(value).view(
+                batch_size, -1, self.num_heads, self.head_dim
+            ).transpose(1, 2)
+
+            if past_key is not None:
+                k = torch.cat([past_key, k], dim=2)
+                v = torch.cat([past_value, v], dim=2)
 
         # Attention scores: [batch, num_heads, seq_len_q, seq_len_k]
         # Note: no explicit 1/sqrt(d) scaling - JAX T5 bakes this into the
@@ -163,6 +186,8 @@ class MultiHeadAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous().view(batch_size, -1, self.num_heads * self.head_dim)
         output = self.out_proj(attn_output)
 
+        if use_cache:
+            return output, k, v
         return output
 
 
@@ -291,29 +316,64 @@ class DecoderLayer(nn.Module):
         encoder_output: torch.Tensor,
         self_attn_mask: Optional[torch.Tensor] = None,
         cross_attn_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+        past_self_key: Optional[torch.Tensor] = None,
+        past_self_value: Optional[torch.Tensor] = None,
+        past_cross_key: Optional[torch.Tensor] = None,
+        past_cross_value: Optional[torch.Tensor] = None,
+        use_cache: bool = False,
+    ):
         """
         Args:
             x: Decoder input [batch, seq_len, emb_dim]
             encoder_output: Encoder output [batch, enc_len, emb_dim]
             self_attn_mask: Causal mask for self-attention
             cross_attn_mask: Mask for cross-attention
+            past_self_key/value: Cached decoder self-attention K/V
+            past_cross_key/value: Cached encoder-decoder attention K/V
+            use_cache: Return updated key/value caches
 
         Returns:
-            Output tensor [batch, seq_len, emb_dim]
+            Output tensor [batch, seq_len, emb_dim], or a tuple containing the
+            output and the four present key/value tensors when use_cache=True.
         """
         # Self-attention block
         residual = x
         x = self.norm1(x)
-        x = self.self_attn(x, x, x, self_attn_mask)
-        x = self.dropout1(x)
+        if use_cache:
+            self_out, self_key, self_value = self.self_attn(
+                x,
+                x,
+                x,
+                self_attn_mask,
+                past_key=past_self_key,
+                past_value=past_self_value,
+                use_cache=True,
+            )
+        else:
+            self_out = self.self_attn(x, x, x, self_attn_mask)
+            self_key = self_value = None
+        x = self.dropout1(self_out)
         x = residual + x
 
         # Cross-attention block
         residual = x
         x = self.norm2(x)
-        x = self.cross_attn(x, encoder_output, encoder_output, cross_attn_mask)
-        x = self.dropout2(x)
+        if use_cache:
+            cross_out, cross_key, cross_value = self.cross_attn(
+                x,
+                encoder_output if past_cross_key is None else None,
+                encoder_output if past_cross_value is None else None,
+                cross_attn_mask,
+                past_key=past_cross_key,
+                past_value=past_cross_value,
+                use_cache=True,
+            )
+        else:
+            cross_out = self.cross_attn(
+                x, encoder_output, encoder_output, cross_attn_mask
+            )
+            cross_key = cross_value = None
+        x = self.dropout2(cross_out)
         x = residual + x
 
         # MLP block
@@ -323,6 +383,8 @@ class DecoderLayer(nn.Module):
         x = self.dropout3(x)
         x = residual + x
 
+        if use_cache:
+            return x, self_key, self_value, cross_key, cross_value
         return x
 
 
@@ -411,27 +473,68 @@ class MT3Decoder(nn.Module):
         encoder_output: torch.Tensor,
         self_attn_mask: Optional[torch.Tensor] = None,
         cross_attn_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+        past_length: int = 0,
+        past_self_keys=None,
+        past_self_values=None,
+        past_cross_keys=None,
+        past_cross_values=None,
+        use_cache: bool = False,
+    ):
         """
         Args:
             decoder_input_ids: Input token IDs [batch, seq_len]
             encoder_output: Encoder output [batch, enc_len, emb_dim]
             self_attn_mask: Causal mask for self-attention
             cross_attn_mask: Mask for cross-attention
+            past_length: Position offset for incremental decoding
+            past_self_keys/values: Per-layer decoder self-attention caches
+            past_cross_keys/values: Per-layer encoder-decoder caches
+            use_cache: Return updated caches
 
         Returns:
-            Logits [batch, seq_len, vocab_size]
+            Logits [batch, seq_len, vocab_size], or a tuple of
+            (logits, self_keys, self_values, cross_keys, cross_values).
         """
         # Embed tokens
         x = self.token_embeddings(decoder_input_ids)
 
         # Add positional encoding
-        x = self.pos_encoding(x)
+        x = self.pos_encoding(x, offset=past_length)
         x = self.dropout(x)
 
         # Apply decoder layers
-        for layer in self.layers:
-            x = layer(x, encoder_output, self_attn_mask, cross_attn_mask)
+        present_self_keys = []
+        present_self_values = []
+        present_cross_keys = []
+        present_cross_values = []
+
+        for index, layer in enumerate(self.layers):
+            if use_cache:
+                x, self_key, self_value, cross_key, cross_value = layer(
+                    x,
+                    encoder_output,
+                    self_attn_mask,
+                    cross_attn_mask,
+                    past_self_key=(
+                        past_self_keys[index] if past_self_keys else None
+                    ),
+                    past_self_value=(
+                        past_self_values[index] if past_self_values else None
+                    ),
+                    past_cross_key=(
+                        past_cross_keys[index] if past_cross_keys else None
+                    ),
+                    past_cross_value=(
+                        past_cross_values[index] if past_cross_values else None
+                    ),
+                    use_cache=True,
+                )
+                present_self_keys.append(self_key)
+                present_self_values.append(self_value)
+                present_cross_keys.append(cross_key)
+                present_cross_values.append(cross_value)
+            else:
+                x = layer(x, encoder_output, self_attn_mask, cross_attn_mask)
 
         # Final normalization
         x = self.final_norm(x)
@@ -440,6 +543,14 @@ class MT3Decoder(nn.Module):
         # Project to vocabulary
         logits = self.output_projection(x)
 
+        if use_cache:
+            return (
+                logits,
+                present_self_keys,
+                present_self_values,
+                present_cross_keys,
+                present_cross_values,
+            )
         return logits
 
 
@@ -505,6 +616,7 @@ class MT3Model(nn.Module):
         start_token_id: int = 0,
         eos_token_id: int = 1,
         temperature: float = 1.0,
+        use_cache: bool = True,
     ) -> torch.Tensor:
         """Autoregressive generation using greedy decoding.
 
@@ -514,28 +626,80 @@ class MT3Model(nn.Module):
             start_token_id: ID of start token
             eos_token_id: ID of end-of-sequence token
             temperature: Sampling temperature (1.0 = no change)
+            use_cache: Use an incremental K/V cache (much faster)
 
         Returns:
             Generated token IDs [batch, seq_len]
         """
         batch_size = encoder_inputs.size(0)
+        if batch_size != 1:
+            raise ValueError("generate currently supports batch size 1")
+
         device = encoder_inputs.device
 
         # Encode once
         encoder_output = self.encoder(encoder_inputs)
 
         # Start with start token
-        generated = torch.full((batch_size, 1), start_token_id, dtype=torch.long, device=device)
+        generated = torch.full(
+            (batch_size, 1),
+            start_token_id,
+            dtype=torch.long,
+            device=device,
+        )
 
-        for _ in range(max_length - 1):
-            # Create causal mask
-            seq_len = generated.size(1)
-            causal_mask = self._create_causal_mask(seq_len, device)
+        if not use_cache:
+            for _ in range(max_length - 1):
+                # Create causal mask
+                seq_len = generated.size(1)
+                causal_mask = self._create_causal_mask(seq_len, device)
 
-            # Get logits for current sequence
-            logits = self.decoder(generated, encoder_output, self_attn_mask=causal_mask)
+                # Get logits for current sequence
+                logits = self.decoder(
+                    generated,
+                    encoder_output,
+                    self_attn_mask=causal_mask,
+                )
 
-            # Get logits for last position and apply temperature
+                # Get logits for last position and apply temperature
+                next_token_logits = logits[:, -1, :] / temperature
+
+                # Greedy sampling
+                next_token = torch.argmax(
+                    next_token_logits, dim=-1, keepdim=True
+                )
+
+                # Append to generated sequence
+                generated = torch.cat([generated, next_token], dim=1)
+
+                # Check if all sequences have generated EOS
+                if (next_token == eos_token_id).all():
+                    break
+
+            return generated
+
+        self_keys = self_values = None
+        cross_keys = cross_values = None
+
+        for step in range(max_length - 1):
+            decoder_input_ids = generated if step == 0 else generated[:, -1:]
+
+            logits, self_keys, self_values, cross_keys, cross_values = (
+                self.decoder(
+                    decoder_input_ids,
+                    encoder_output,
+                    self_attn_mask=None,
+                    cross_attn_mask=None,
+                    past_length=step,
+                    past_self_keys=self_keys,
+                    past_self_values=self_values,
+                    past_cross_keys=cross_keys,
+                    past_cross_values=cross_values,
+                    use_cache=True,
+                )
+            )
+
+            # Get logits for the new position and apply temperature
             next_token_logits = logits[:, -1, :] / temperature
 
             # Greedy sampling
@@ -544,7 +708,7 @@ class MT3Model(nn.Module):
             # Append to generated sequence
             generated = torch.cat([generated, next_token], dim=1)
 
-            # Check if all sequences have generated EOS
+            # Check if the sequence has generated EOS
             if (next_token == eos_token_id).all():
                 break
 

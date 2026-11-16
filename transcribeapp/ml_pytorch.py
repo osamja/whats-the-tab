@@ -6,7 +6,6 @@ This module intentionally delegates core inference/decoding to
 
 import os
 import sys
-import note_seq
 
 # Import PyTorch MT3 implementation from sibling directory.
 pytorch_mt3_path = os.path.join(
@@ -15,7 +14,6 @@ pytorch_mt3_path = os.path.join(
 )
 sys.path.insert(0, pytorch_mt3_path)
 
-from pytorch_mt3.pytorch_spectrograms import load_audio
 from pytorch_mt3.standalone_inference import StandaloneMT3
 
 SAMPLE_RATE = 16000

@@ -57,8 +57,8 @@
 │  ─────────────             │            │  │                                  │  │
 │  task:queue     LIST       │            │  │  runworker (main loop)           │  │
 │  task:processing LIST      │            │  │    │                             │  │
-│  task:failed    LIST       │            │  │    ├─ SUBSCRIBE task:new         │  │
-│  task:results   LIST       │            │  │    ├─ RPOPLPUSH task:queue       │  │
+│  task:failed    LIST       │            │  │    ├─ BRPOPLPUSH task:queue      │  │
+│  task:results   LIST       │            │  │    │      -> task:processing      │  │
 │  task:proc:time ZSET       │            │  │    ├─ HSET task:{id} status      │  │
 │  task:{uuid}    HASH       │            │  │    ├─ PUBLISH task:claimed       │  │
 │                            │            │  │    ├─ GET /media/audio (HTTP)    │  │
@@ -96,7 +96,7 @@ Each task has a hash at `task:{task_id}` tracking its full lifecycle:
   └────────────────────────────┘
 
   ┌────────────────────────────┐
-  │ status:        "processing"│  RPOPLPUSH → task:processing, ZADD time
+  │ status:        "processing"│  BRPOPLPUSH → task:processing, ZADD time
   │ started_at:    1714...     │  PUBLISH task:claimed
   │ worker_id:     "w3x.."     │
   └────────────────────────────┘
@@ -147,8 +147,8 @@ Each task has a hash at `task:{task_id}` tracking its full lifecycle:
 5. `PUBLISH task:new {id}`
 
 ### Claim (Worker)
-1. Worker receives `task:new` via pub/sub
-2. `RPOPLPUSH task:queue task:processing {id}` (atomic claim)
+1. `BRPOPLPUSH task:queue task:processing` blocks until a task is available
+2. The returned task ID is the claimed task ID — never inferred from pub/sub
 3. `ZADD task:processing:time {timestamp} {id}`
 4. `HSET task:{id} status processing worker_id ...`
 5. `PUBLISH task:claimed {id}`
@@ -208,16 +208,26 @@ Each task has a hash at `task:{task_id}` tracking its full lifecycle:
 ## Production Hardening
 
 ### Task TTL
-Failed task hashes auto-expire after 24 hours: `EXPIRE task:{id} 86400`. The dead letter queue entries are transient — inspect, learn, let Redis clean up.
+Completed task hashes auto-expire after 7 days (`TASK_RESULT_TTL`) and failed
+task hashes after 24 hours (`TASK_FAILED_TTL`). The dead letter list is capped
+at `TASK_FAILED_MAX` entries.
 
-### Worker Heartbeat
-A daemon thread writes to `worker:{worker_id}` every 10 seconds with `{last_heartbeat, current_task}`. Hashes expire after 30s of silence so dead workers disappear. Query `HGETALL worker:*` to see live workers.
+### Worker Heartbeat and Reaping
+A daemon thread writes to `worker:{worker_id}` every 10 seconds with
+`{last_heartbeat, current_task}`. Hashes expire after 30s of silence so dead
+workers disappear. Idle workers call `reap_stale_tasks()` every
+`TASK_REAP_INTERVAL` seconds: tasks past `TASK_PROCESSING_TIMEOUT` whose worker
+heartbeat is gone are requeued up to `TASK_MAX_RETRIES`, then failed.
 
 ### Graceful Shutdown
-SIGTERM/SIGINT caught by signal handler. Workers flush the currently-processing task to `failed` before exiting. No orphaned tasks left in `task:processing`.
+SIGTERM/SIGINT caught by signal handler. The worker checks the shutdown flag
+between blocking queue polls and does not leave orphaned tasks in
+`task:processing`.
 
 ### Idempotent Result Endpoint
-`POST /_result/` checks if the task already has a completed file. Duplicate uploads from re-processing return 200 without re-saving.
+`POST /_result/` requires `X-Worker-Token` matching `WORKER_SHARED_SECRET`. It
+also checks if the task already has a completed file. Duplicate uploads from
+re-processing return 200 without re-saving.
 
 ### Metrics Endpoint
 `GET /transcribe/metrics/` returns:

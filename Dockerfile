@@ -31,6 +31,10 @@ RUN uv sync --frozen --no-dev --no-install-project --extra gpu
 
 COPY . .
 
+# Bake the checkpoint into the image so worker cold starts do not depend on a
+# 175 MB download from GitHub Releases.
+RUN uv run python -c "from pytorch_mt3.download_checkpoint import ensure_checkpoint; ensure_checkpoint('pytorch_mt3/mt3_pytorch_checkpoint.pt')"
+
 EXPOSE 8008
 
 CMD ["uv", "run", "python", "manage.py", "runworker"]

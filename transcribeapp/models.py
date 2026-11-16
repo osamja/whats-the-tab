@@ -1,13 +1,29 @@
 from django.db import models
 
+
 class AudioMIDI(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        QUEUED = "queued", "Queued"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+        YOUTUBE_AUDIO_DOWNLOADED = (
+            "youtube_audio_downloaded",
+            "YouTube audio downloaded",
+        )
+
     audio_filename = models.CharField(max_length=255)
-    audio_file = models.FileField(upload_to='audios/')
-    midi_file = models.FileField(upload_to='midi/', blank=True, null=True)
+    audio_file = models.FileField(upload_to="audios/")
+    midi_file = models.FileField(upload_to="midi/", blank=True, null=True)
     youtube_url = models.URLField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    status = models.CharField(max_length=20, default='pending')
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
     current_chunk = models.IntegerField(default=0)
     total_chunks = models.IntegerField(default=0)
     error_message = models.TextField(blank=True, default="")

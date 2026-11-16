@@ -21,10 +21,11 @@
             "justMyCode": false,
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}",
-            "python": "${workspaceFolder}/venv/bin/python",
+            "python": "${workspaceFolder}/.venv/bin/python",
             "env": {
                 "PYTHONUNBUFFERED": "1",
-                "IS_ASYNC": "False"
+                "DEBUG": "True",
+                "SERVE_MEDIA": "True"
             }
         }
     ]

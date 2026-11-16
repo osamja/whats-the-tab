@@ -25,21 +25,33 @@ def ensure_checkpoint(checkpoint_path=None):
     if checkpoint_path.exists():
         return checkpoint_path
 
-    # Download checkpoint
-    print(f"Downloading checkpoint from GitHub Releases (~175 MB)...")
+    # Download the pre-converted checkpoint when the release asset exists.
+    print("Downloading checkpoint from GitHub Releases (~175 MB)...")
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         urllib.request.urlretrieve(RELEASE_URL, checkpoint_path)
         print(f"✓ Downloaded to {checkpoint_path}")
-    except Exception as e:
+    except Exception as release_error:
         if checkpoint_path.exists():
             checkpoint_path.unlink()
-        raise FileNotFoundError(
-            f"Failed to download checkpoint. Please download manually:\n"
-            f"URL: {RELEASE_URL}\n"
-            f"Destination: {checkpoint_path}"
-        ) from e
+
+        print("Release download failed; rebuilding from the public MT3 checkpoint...")
+        try:
+            from .prepare_checkpoint import prepare_checkpoint
+
+            prepare_checkpoint(checkpoint_path)
+            print(f"✓ Converted checkpoint saved to {checkpoint_path}")
+        except Exception as conversion_error:
+            if checkpoint_path.exists():
+                checkpoint_path.unlink()
+            raise FileNotFoundError(
+                "Failed to download or convert the checkpoint.\n"
+                f"Release URL: {RELEASE_URL}\n"
+                f"Destination: {checkpoint_path}\n"
+                f"Release error: {release_error}\n"
+                f"Conversion error: {conversion_error}"
+            ) from conversion_error
 
     return checkpoint_path
 

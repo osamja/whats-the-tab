@@ -36,10 +36,14 @@ services:
       - "8008:8008"
     environment:
       DEBUG: "False"
+      SERVE_MEDIA: "True"
       SECRET_KEY: "dev-key-change-in-production"
+      WORKER_SHARED_SECRET: "dev-worker-secret-change-in-production"
       DATABASE_URL: "postgres://whatsthetab:whatsthetab@postgres:5432/whatsthetab"
       REDIS_URL: "redis://redis:6379"
       WEB_URL: "http://web:8008"
+    volumes:
+      - media_data:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,6 +51,7 @@ services:
         condition: service_healthy
 
   worker:
+    profiles: ["gpu"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -54,6 +59,7 @@ services:
     environment:
       DEBUG: "False"
       SECRET_KEY: "dev-key-change-in-production"
+      WORKER_SHARED_SECRET: "dev-worker-secret-change-in-production"
       REDIS_URL: "redis://redis:6379"
       WEB_URL: "http://web:8008"
     deploy:
@@ -71,3 +77,4 @@ services:
 
 volumes:
   postgres_data:
+  media_data:
