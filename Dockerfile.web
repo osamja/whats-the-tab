@@ -12,12 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-COPY requirements-web.txt ./
-RUN uv pip install --system -r requirements-web.txt
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
+
+ENV PATH="/app/.venv/bin:$PATH"
 
 COPY . .
 
-RUN mkdir -p audios midi && chmod +x entrypoint.sh
+RUN mkdir -p media/audios media/midi \
+    && chmod +x entrypoint.sh \
+    && SECRET_KEY=build-only python manage.py collectstatic --noinput
 
 EXPOSE 8008
 
