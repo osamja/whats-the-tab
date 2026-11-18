@@ -108,12 +108,9 @@ credentials.
 
 ## Docker Compose
 
-The current Compose file does not pass `AWS_*` variables into the `web`
-container. Running directly with `uv run` loads `.env`; running through Docker
-Compose currently keeps using local `media/`.
-
-To use object storage with Compose, add the variables to the `web` service's
-`environment` block or an `env_file` entry.
+Compose passes the storage variables from the shell or project `.env` to the
+`web` service. Set `SERVE_MEDIA=False` for object storage. An empty
+`AWS_STORAGE_BUCKET_NAME` selects local filesystem storage.
 
 ## Retention
 

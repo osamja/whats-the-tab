@@ -1,12 +1,15 @@
+import base64
 import os
 import shutil
+import sys
 import tempfile
 import time
 import uuid
 from datetime import timedelta
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import redis
 from django.conf import settings
@@ -17,6 +20,7 @@ from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 
 from transcribeapp.models import AudioMIDI
+from transcribeapp.management.commands.runworker import Command as WorkerCommand
 from transcribeapp.queue import (
     claim_task,
     enqueue_task,
@@ -26,6 +30,97 @@ from transcribeapp.queue import (
     reap_stale_tasks,
 )
 from transcribeapp.ratelimit import check_rate_limit
+
+
+@override_settings(VAST_ENDPOINT_NAME="test-endpoint", VAST_API_KEY="test-key")
+class VastDispatcherTests(TestCase):
+    @patch("transcribeapp.management.commands.runworker.mark_completed")
+    @patch("transcribeapp.management.commands.runworker.publish_progress")
+    @patch("django.db.models.fields.files.FieldFile.url", new_callable=PropertyMock)
+    def test_dispatcher_signs_fresh_url_and_uploads_midi(
+        self, signed_url, progress, completed
+    ):
+        from mido import MidiFile, MidiTrack
+
+        midi = MidiFile()
+        midi.tracks.append(MidiTrack())
+        buffer = BytesIO()
+        midi.save(file=buffer)
+        midi_bytes = buffer.getvalue()
+        audio = AudioMIDI.objects.create(
+            audio_filename="test.wav", audio_file="audios/test.wav"
+        )
+        task_id = str(audio.pk)
+        signed_url.return_value = "https://media.example.test/test.wav?fresh=1"
+        endpoint = SimpleNamespace(
+            request=AsyncMock(return_value={
+                "status": 200,
+                "response": {"result": {"ok": base64.b64encode(midi_bytes).decode()}},
+            })
+        )
+        serverless = MagicMock()
+        serverless.__aenter__.return_value.get_endpoint = AsyncMock(return_value=endpoint)
+        command = WorkerCommand()
+
+        def upload(task_id, status, path):
+            self.assertEqual(path.read_bytes(), midi_bytes)
+
+        with (
+            patch.dict(
+                sys.modules, {"vastai": SimpleNamespace(Serverless=lambda **_: serverless)}
+            ),
+            patch.object(command, "_upload_result", side_effect=upload) as callback,
+        ):
+            command._process_task(task_id, {
+                "payload": {"type": "transcribe", "audio_url": "expired"},
+            })
+
+        endpoint.request.assert_awaited_once_with(
+            "/remote/transcribe",
+            {"kwargs": {"audio_url": signed_url.return_value}},
+            retry=False,
+        )
+        self.assertEqual(callback.call_args.args[:2], (task_id, "completed"))
+        self.assertEqual([call.args for call in progress.call_args_list], [
+            (task_id, 0, 1), (task_id, 1, 1),
+        ])
+        completed.assert_called_once_with(task_id, "completed")
+
+    @patch("transcribeapp.management.commands.runworker.mark_completed")
+    @patch("transcribeapp.management.commands.runworker.publish_progress")
+    @patch("transcribeapp.vast_client._request_transcription", return_value="bm90IG1pZGk=")
+    @patch("django.db.models.fields.files.FieldFile.url", new_callable=PropertyMock)
+    def test_invalid_midi_never_reaches_callback(
+        self, signed_url, _request, progress, completed
+    ):
+        signed_url.return_value = "https://media.example.test/test.wav?fresh=1"
+        audio = AudioMIDI.objects.create(
+            audio_filename="test.wav", audio_file="audios/test.wav"
+        )
+        command = WorkerCommand()
+        with patch.object(command, "_upload_result") as callback:
+            with self.assertRaisesMessage(RuntimeError, "Vast returned invalid MIDI"):
+                command._process_task(str(audio.pk), {"payload": {"type": "transcribe"}})
+        callback.assert_not_called()
+        completed.assert_not_called()
+        progress.assert_called_once_with(str(audio.pk), 0, 1)
+
+    @override_settings(VAST_ENDPOINT_NAME="")
+    @patch("transcribeapp.management.commands.runworker.mark_completed")
+    @patch("transcribeapp.management.commands.runworker.transcribe_audio")
+    def test_local_worker_uses_queued_audio_url(self, transcribe, completed):
+        command = WorkerCommand()
+        with (
+            patch.object(command, "_download_audio", return_value="download.wav") as download,
+            patch.object(command, "_upload_result") as callback,
+        ):
+            command._process_task("42", {
+                "payload": {"type": "transcribe", "audio_url": "http://web/audio.wav"},
+            })
+        self.assertEqual(download.call_args.args[0], "http://web/audio.wav")
+        self.assertEqual(transcribe.call_args.args[0], "download.wav")
+        callback.assert_called_once_with("42", "completed", transcribe.return_value)
+        completed.assert_called_once_with("42", "completed")
 
 
 class MediaRootTests(TestCase):

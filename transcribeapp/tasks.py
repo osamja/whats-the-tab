@@ -64,14 +64,18 @@ def download_youtube_audio(youtube_url, output_dir):
     return output_path
 
 
-def transcribe_audio(audio_filepath, output_dir, progress_callback=None):
+def transcribe_audio(
+    audio_filepath, output_dir, progress_callback=None, *, max_duration=None
+):
     import note_seq
     import torchaudio
-    from django.conf import settings
     from pytorch_mt3.pytorch_spectrograms import load_audio
     from .ml_pytorch import SAMPLE_RATE
 
-    max_duration = settings.MAX_AUDIO_DURATION_SECONDS
+    if max_duration is None:
+        from django.conf import settings
+
+        max_duration = settings.MAX_AUDIO_DURATION_SECONDS
 
     # Check duration before decoding the whole file into memory.
     try:

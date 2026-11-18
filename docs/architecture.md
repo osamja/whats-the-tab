@@ -8,8 +8,8 @@ and uses Vast.ai Serverless only for GPU inference.
 - **Web tier:** Django + gunicorn, the Redis subscriber, Redis, and PostgreSQL.
 - **Object storage:** Cloudflare R2, Linode Object Storage, or S3 for uploaded
   audio and generated MIDI. See [`object-storage.md`](object-storage.md).
-- **GPU tier:** a Vast serverless endpoint running the MT3 model server and
-  PyWorker. Workers are ephemeral and have no database or Redis access.
+- **GPU tier:** a Vast Deployments endpoint running MT3. Workers are ephemeral
+  and have no database or Redis access.
 - **Dispatcher:** the existing `runworker` process claims Redis jobs and calls
   the Vast endpoint. It keeps the current retry, progress, and result-callback
   behavior.
@@ -20,7 +20,7 @@ and uses Vast.ai Serverless only for GPU inference.
 2. Django stores the audio in R2/S3 and creates an `AudioMIDI` row in Postgres.
 3. `POST /generate/` enqueues a task in Redis.
 4. The dispatcher claims the task.
-5. The dispatcher sends a presigned audio URL to the Vast inference endpoint.
+5. The dispatcher signs a fresh audio URL and sends it to the Vast inference endpoint.
 6. The Vast GPU worker downloads the audio from R2/S3 and runs MT3.
 7. The GPU worker returns MIDI bytes to the dispatcher.
 8. The dispatcher posts the result to Django with `X-Worker-Token`.
@@ -42,7 +42,7 @@ flowchart LR
     W[Dispatcher / runworker]
   end
   subgraph V[Vast.ai Serverless]
-    X[PyWorker endpoint]
+    X[Vast Deployments endpoint]
     G[GPU worker: MT3]
   end
   O[(Cloudflare R2 / S3)]
@@ -54,7 +54,7 @@ flowchart LR
   R -->|progress / completion| S
   S -->|update DB| P
   R -->|claim| W
-  W -->|POST /transcribe| X --> G
+  W -->|POST /remote/transcribe| X --> G
   G -->|GET audio| O
   G -->|MIDI bytes| W
   W -->|POST /_result + token| D
@@ -81,7 +81,7 @@ sequenceDiagram
   B->>D: POST /transcribe/generate/
   D->>R: enqueue job
   W->>R: claim job
-  W->>V: POST /transcribe {audio_url}
+  W->>V: POST /remote/transcribe
   V->>O: GET audio (presigned)
   V-->>W: MIDI bytes
   W->>D: POST /_result + worker token
@@ -107,6 +107,7 @@ docker compose --profile gpu up --build
 
 - For the implementation handoff and remaining Vast work, see
   [`handoff-vast-serverless.md`](handoff-vast-serverless.md).
+- For setup and live validation, see [`vast-serverless.md`](vast-serverless.md).
 - The Vast worker image is built from `Dockerfile` and includes the converted
   MT3 checkpoint.
 - The old pre-converted checkpoint release is gone; `prepare_checkpoint.py`
