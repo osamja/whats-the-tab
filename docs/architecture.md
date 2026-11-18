@@ -6,7 +6,8 @@ The target deployment keeps the stateful, always-on pieces on a small web host
 and uses Vast.ai Serverless only for GPU inference.
 
 - **Web tier:** Django + gunicorn, the Redis subscriber, Redis, and PostgreSQL.
-- **Object storage:** Cloudflare R2 or S3 for uploaded audio and generated MIDI.
+- **Object storage:** Cloudflare R2, Linode Object Storage, or S3 for uploaded
+  audio and generated MIDI. See [`object-storage.md`](object-storage.md).
 - **GPU tier:** a Vast serverless endpoint running the MT3 model server and
   PyWorker. Workers are ephemeral and have no database or Redis access.
 - **Dispatcher:** the existing `runworker` process claims Redis jobs and calls
