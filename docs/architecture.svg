@@ -122,7 +122,7 @@
 
   <!-- Vast endpoint -->
   <rect x="970" y="590" width="560" height="100" rx="14" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
-  <text x="1250" y="622" text-anchor="middle" class="card-title">Vast endpoint / PyWorker</text>
+  <text x="1250" y="622" text-anchor="middle" class="card-title">Vast Deployments endpoint</text>
   <text x="1250" y="648" text-anchor="middle" class="card-body">route · signed auth · autoscaling</text>
   <text x="1250" y="668" text-anchor="middle" class="card-small">cold_workers / max_workers / queue time</text>
 
@@ -140,7 +140,7 @@
 
   <!-- Dispatcher -> Vast -->
   <line x1="760" y1="648" x2="962" y2="648" stroke="#7c3aed" stroke-width="2.5" marker-end="url(#arrow-purple)"/>
-  <text x="861" y="638" text-anchor="middle" class="edge-label">POST /transcribe {audio_url}</text>
+  <text x="861" y="638" text-anchor="middle" class="edge-label">POST /remote/transcribe</text>
 
   <!-- Vast -> Dispatcher -->
   <line x1="970" y1="670" x2="768" y2="670" stroke="#7c3aed" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#arrow-purple)"/>

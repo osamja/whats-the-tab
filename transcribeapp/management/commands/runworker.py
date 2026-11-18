@@ -7,7 +7,7 @@ import time
 import uuid
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from transcribeapp.queue import (
     claim_task,
@@ -18,12 +18,18 @@ from transcribeapp.queue import (
     reap_stale_tasks,
 )
 from transcribeapp.tasks import download_youtube_audio, transcribe_audio
+from transcribeapp.vast_client import check_vast_configuration, transcribe_via_vast
 
 
 class Command(BaseCommand):
     help = "Run a transcription worker that pulls tasks from the Redis queue"
 
     def handle(self, *args, **options):
+        if settings.VAST_ENDPOINT_NAME:
+            try:
+                check_vast_configuration()
+            except RuntimeError as exc:
+                raise CommandError(str(exc)) from None
         self.web_url = settings.WEB_URL.rstrip("/")
         self.worker_id = uuid.uuid4().hex[:8]
         self.current_task_id = None
@@ -133,17 +139,24 @@ class Command(BaseCommand):
                 self._upload_result(task_id, result_status, output_path)
 
             elif task_type == "transcribe":
-                audio_path = self._download_audio(
-                    state["payload"]["audio_url"], tmpdir
-                )
+                use_vast = bool(settings.VAST_ENDPOINT_NAME)
+                if use_vast:
+                    publish_progress(task_id, 0, 1)
+                    midi_path = transcribe_via_vast(task_id, tmpdir)
+                else:
+                    audio_path = self._download_audio(
+                        state["payload"]["audio_url"], tmpdir
+                    )
 
-                def progress_callback(current, total):
-                    publish_progress(task_id, current, total)
+                    def progress_callback(current, total):
+                        publish_progress(task_id, current, total)
 
-                midi_path = transcribe_audio(
-                    audio_path, tmpdir, progress_callback=progress_callback
-                )
+                    midi_path = transcribe_audio(
+                        audio_path, tmpdir, progress_callback=progress_callback
+                    )
                 self._upload_result(task_id, result_status, midi_path)
+                if use_vast:
+                    publish_progress(task_id, 1, 1)
 
             else:
                 raise ValueError(f"Unknown task type: {task_type}")

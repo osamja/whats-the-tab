@@ -2,6 +2,7 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
     UV_LINK_MODE=copy \
     DEBIAN_FRONTEND=noninteractive
 

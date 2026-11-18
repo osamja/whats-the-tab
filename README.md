@@ -94,7 +94,7 @@ uv run gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 2 --worker-class gthre
 - Django does not serve `/media/` unless `DEBUG=True` or `SERVE_MEDIA=True`. In production, serve media through nginx or object storage; only set `SERVE_MEDIA=True` for simple deployments that need Django to serve it.
 - `runworker` polls Redis for jobs, writes real-time progress, reaps stale jobs from dead workers, and retries interrupted jobs up to `TASK_MAX_RETRIES`.
 
-For deploying to a vast.ai GPU instance behind the `pyaar.ai/transcribe/*` nginx proxy, see [`docs/vast-deploy.md`](docs/vast-deploy.md). Vast instances are containers themselves and cannot run Docker, so the runbook covers launching `redis-server`, `gunicorn`, and the `runworker` process directly under `uv`.
+For Linode with Vast GPU inference, follow the [Vast Serverless runbook](docs/vast-serverless.md). The [single Vast instance runbook](docs/vast-deploy.md) covers the older all-in-one deployment.
 
 ### Retention
 

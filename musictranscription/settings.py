@@ -168,6 +168,8 @@ RATE_LIMIT_TRANSCRIPTIONS = int(os.getenv("RATE_LIMIT_TRANSCRIPTIONS", "20"))
 RATE_LIMIT_YOUTUBE_DOWNLOADS = int(os.getenv("RATE_LIMIT_YOUTUBE_DOWNLOADS", "10"))
 
 WEB_URL = os.getenv("WEB_URL", "http://localhost:8008")
+VAST_ENDPOINT_NAME = os.getenv("VAST_ENDPOINT_NAME", "").strip()
+VAST_API_KEY = os.getenv("VAST_API_KEY", "").strip()
 
 # Shared secret used by the worker when posting results back to the web app.
 # When unset, /transcribe/_result/ rejects all requests.

@@ -4,6 +4,9 @@ This is the starting point for an agent continuing the Vast.ai Serverless
 implementation. Read this before changing the deployment architecture. For the
 broader pre-deployment review, see [`pre-deploy-design.md`](pre-deploy-design.md).
 
+This document records the state at handoff. For the implementation and current
+deployment steps, see [`vast-serverless.md`](vast-serverless.md).
+
 ## Current state
 
 - Main branch includes the pre-deployment hardening work (PR #4) and the
