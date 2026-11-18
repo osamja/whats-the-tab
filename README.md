@@ -140,6 +140,11 @@ curl -o output.midi http://127.0.0.1:8008/transcribe/download_midi/<ID>/
 
 ## Architecture
 
+![Target architecture](docs/architecture.svg)
+
+See [docs/architecture.md](docs/architecture.md) for the request lifecycle and
+Mermaid diagrams.
+
 - **ML backend:** `transcribeapp/ml_pytorch.py` — PyTorch MT3 inference
 - **Model:** `pytorch_mt3/pytorch_model.py` — T5 1.1 encoder-decoder (8 layers, 512 dim, 6 heads)
 - **Spectrogram:** `pytorch_mt3/pytorch_spectrograms.py` — log-mel spectrogram matching MT3's spectral_ops
