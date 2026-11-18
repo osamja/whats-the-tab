@@ -104,6 +104,8 @@ docker compose --profile gpu up --build
 
 ## Notes
 
+- For the implementation handoff and remaining Vast work, see
+  [`handoff-vast-serverless.md`](handoff-vast-serverless.md).
 - The Vast worker image is built from `Dockerfile` and includes the converted
   MT3 checkpoint.
 - The old pre-converted checkpoint release is gone; `prepare_checkpoint.py`
