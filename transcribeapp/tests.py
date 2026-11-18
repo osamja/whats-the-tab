@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import redis
+import requests
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -33,7 +34,7 @@ from transcribeapp.ratelimit import check_rate_limit
 
 
 @override_settings(VAST_ENDPOINT_NAME="test-endpoint", VAST_API_KEY="test-key")
-class VastDispatcherTests(TestCase):
+class WorkerDispatchTests(TestCase):
     @patch("transcribeapp.management.commands.runworker.mark_completed")
     @patch("transcribeapp.management.commands.runworker.publish_progress")
     @patch("django.db.models.fields.files.FieldFile.url", new_callable=PropertyMock)
@@ -121,6 +122,20 @@ class VastDispatcherTests(TestCase):
         self.assertEqual(transcribe.call_args.args[0], "download.wav")
         callback.assert_called_once_with("42", "completed", transcribe.return_value)
         completed.assert_called_once_with("42", "completed")
+
+    @patch("transcribeapp.management.commands.runworker.requests.get")
+    def test_download_failure_keeps_signed_url_out_of_worker_errors(self, get):
+        audio_url = "https://media.example.test/test.wav?signature=private"
+        response = requests.Response()
+        response.status_code = 403
+        response.url = audio_url
+        get.return_value.__enter__.return_value = response
+
+        command = WorkerCommand(stdout=StringIO())
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesMessage(RuntimeError, "Audio download returned HTTP 403"):
+                command._download_audio(audio_url, directory)
+        self.assertNotIn("signature", command.stdout.getvalue())
 
 
 class MediaRootTests(TestCase):

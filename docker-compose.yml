@@ -53,6 +53,11 @@ services:
       WEB_URL: "http://web:8008"
     volumes:
       - media_data:/app/media
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8008/transcribe/ready/"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,7 +87,7 @@ services:
       redis:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   postgres_data:

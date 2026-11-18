@@ -5,6 +5,7 @@ import tempfile
 import threading
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -164,16 +165,22 @@ class Command(BaseCommand):
         mark_completed(task_id, result_status)
 
     def _download_audio(self, audio_url, tmpdir):
-        filename = os.path.basename(audio_url)
+        filename = os.path.basename(urlsplit(audio_url).path) or "audio"
         local_path = os.path.join(tmpdir, filename)
 
-        self.stdout.write(f"Downloading audio: {audio_url}")
-        resp = requests.get(audio_url, stream=True, timeout=300)
-        resp.raise_for_status()
-
-        with open(local_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
+        self.stdout.write("Downloading audio")
+        try:
+            with requests.get(audio_url, stream=True, timeout=300) as response:
+                response.raise_for_status()
+                with open(local_path, "wb") as audio:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        audio.write(chunk)
+        except requests.HTTPError as exc:
+            raise RuntimeError(
+                f"Audio download returned HTTP {exc.response.status_code}"
+            ) from None
+        except requests.RequestException:
+            raise RuntimeError("Audio download failed") from None
 
         return local_path
 

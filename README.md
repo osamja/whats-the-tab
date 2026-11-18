@@ -54,6 +54,8 @@ docker compose --profile gpu up --build
 ```
 
 The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar container.
+See the [Compose validation guide](docs/local-compose.md) for the service
+diagram, test suite, and audio-to-MIDI smoke test.
 
 The GPU profile requires the NVIDIA Container Toolkit and a configured Docker
 GPU runtime. Without it, run the web stack only or run the worker directly with
