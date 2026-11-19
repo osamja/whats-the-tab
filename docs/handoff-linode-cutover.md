@@ -210,3 +210,59 @@ PostgreSQL and Redis stay on the project network. For nginx verification,
 attach only web to the proxy network using a unique alias after the private
 smoke test. Keep the attachment in the deployed Compose configuration so
 it survives container replacement.
+
+### Linode operator record
+
+- Compose project `whatsthetab-linode` uses `docker-compose.yml` and
+  `docker-compose.linode.yml` from `~/workspace/whats-the-tab`. The transferred
+  credentials are in the ignored, mode-0600 `.env`. Pass that file first with
+  `--env-file .env`, then pass
+  `--env-file ~/.config/whatsthetab-linode/database.env` for the independently
+  generated database password.
+- The deployed source revision for the private origin is `0ee3c1261bbb`.
+  Web and dispatcher images built on Linode. The isolated PostgreSQL and
+  Redis rehearsal passed all 28 Django tests. Private readiness reported
+  one dispatcher. An unsigned audio object GET returned 403 and a signed
+  GET returned 200. The private result endpoint returned 403 without the
+  worker token. The `www.pyaar.ai` origin received an explicit CORS header
+  from Django. A synthetic MIDI fixture from the private bucket confirmed
+  the same-origin preview returns 200 and the signed download redirect
+  returns 302. The unsigned MIDI GET returned 403.
+- Vast deployment `5789` uses endpoint `45265`,
+  `deployment-whats-the-tab-3060-default`, with a one-worker cap and the
+  digest recorded above. The listed stopped RTX 3060 rental was
+  about $0.06989/hr. The first Linode melody moved to queued and processing
+  before failing at 600.89 seconds. Vast reported zero ready workers and
+  said the previous worker's host lacked resources when asked to restart it.
+  A rolling update and stop/start did not provide a ready replacement.
+  The second private melody timed out after 600.85 seconds.
+- The separately tagged Vast deployment `5792` used endpoint `45268`,
+  `deployment-whats-the-tab-3060-linode`, the same image and GPU, and a
+  one-worker cap. It rented an RTX 3060 at $0.107/hr. The worker logs
+  showed retries on layer `8ac6d7d2262f`, which is 6.15 GiB compressed,
+  while the worker remained in loading. Its cold melody timed out after
+  600.52 seconds. No Linode job produced a GPU-generated MIDI, so warm
+  timing and malformed-audio recovery could not be measured.
+- The disposable job rows and bucket objects were removed. The dispatcher
+  was restored to its original endpoint configuration. Public routing
+  still points to the legacy upstream. Cutover requires a successful
+  private transcription, a latency decision, and a legacy-job plan.
+- The active nginx config is
+  `~/workspace/nginx_sammyjaved_proxy/nginx.conf`, mounted at
+  `/etc/nginx/nginx.conf` in `nginx_sammyjaved_proxy-my-site-proxy-1`.
+  The private snapshot is
+  `~/.config/whatsthetab-linode/nginx-before-cutover.conf`.
+  The active config passed `nginx -t`. Before cutover,
+  `https://pyaar.ai/transcribe/` returned 502 on the legacy upstream and the
+  Pyaar and adjacent homepages returned 200.
+
+After a future nginx change, restore the captured config using the same
+bind-mounted file, then validate and reload:
+
+```bash
+proxy="$HOME/workspace/nginx_sammyjaved_proxy/nginx.conf"
+snapshot="$HOME/.config/whatsthetab-linode/nginx-before-cutover.conf"
+test -s "$snapshot" && cat "$snapshot" > "$proxy" &&
+  docker exec nginx_sammyjaved_proxy-my-site-proxy-1 nginx -t &&
+  docker exec nginx_sammyjaved_proxy-my-site-proxy-1 nginx -s reload
+```
