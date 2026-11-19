@@ -272,3 +272,17 @@ test -s "$snapshot" && cat "$snapshot" > "$proxy" &&
   docker exec nginx_sammyjaved_proxy-my-site-proxy-1 nginx -t &&
   docker exec nginx_sammyjaved_proxy-my-site-proxy-1 nginx -s reload
 ```
+
+### Prewarmed worker retry
+
+The tagged deployment `5792` reached Vast's `idle` worker state before
+the staging deadline. The Linode dispatcher submitted a private melody job
+only after that readiness signal. Vast assigned a worker, but the SDK
+repeatedly returned `ClientConnectorError` on the direct worker connection.
+The job failed after 24.92 seconds. The dispatcher was restored to its
+original endpoint configuration, the tagged deployment was stopped, rental
+`61393059` exited, and the test job and private audio were removed.
+
+The next test needs to verify that Linode can connect to the worker address
+and port returned by Vast routing while that worker is idle. Then run the
+private audio-to-MIDI smoke suite before changing public nginx routing.
