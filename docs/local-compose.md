@@ -1,28 +1,6 @@
 # Local Compose validation
 
-```mermaid
-flowchart LR
-    Client["Smoke test or browser"]
-    subgraph Compose["Docker Compose"]
-        Web["Django + gunicorn"]
-        Subscriber["Redis subscriber"]
-        DB[("PostgreSQL")]
-        Queue[("Redis")]
-        Media[("Local media volume")]
-        Worker["runworker + MT3"]
-    end
-    GPU["Host NVIDIA GPU"]
-
-    Client -->|"Upload, enqueue, poll, download"| Web
-    Web --> DB
-    Web --> Media
-    Web -->|"Enqueue"| Queue
-    Queue -->|"Claim"| Worker
-    Queue -->|"Progress and completion"| Subscriber
-    Subscriber --> DB
-    Worker -->|"GET audio / POST authenticated MIDI"| Web
-    Worker --> GPU
-```
+![Local Docker Compose architecture](local-compose.svg)
 
 ## Run the checks
 
