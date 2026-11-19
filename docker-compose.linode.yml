@@ -1,0 +1,66 @@
+x-linode-runtime: &linode-runtime
+  SECRET_KEY: "${SECRET_KEY:?Set SECRET_KEY}"
+  WORKER_SHARED_SECRET: "${WORKER_SHARED_SECRET:?Set WORKER_SHARED_SECRET}"
+  DEBUG: "False"
+  SERVE_MEDIA: "False"
+  ALLOWED_HOSTS: "pyaar.ai,127.0.0.1,localhost,web"
+  CSRF_TRUSTED_ORIGINS: "https://pyaar.ai"
+  CORS_ALLOWED_ORIGINS: "https://pyaar.ai"
+  SESSION_COOKIE_SECURE: "True"
+  CSRF_COOKIE_SECURE: "True"
+  TRANSCRIBE_API_KEY: "${TRANSCRIBE_API_KEY:-}"
+  DATABASE_URL: "postgres://whatsthetab:${LINODE_DB_PASSWORD:?Set LINODE_DB_PASSWORD}@postgres:5432/whatsthetab"
+  REDIS_URL: "redis://redis:6379"
+  WEB_URL: "http://web:8008"
+  AWS_STORAGE_BUCKET_NAME: "${AWS_STORAGE_BUCKET_NAME:?Set AWS_STORAGE_BUCKET_NAME}"
+  AWS_S3_ENDPOINT_URL: "${AWS_S3_ENDPOINT_URL:?Set AWS_S3_ENDPOINT_URL}"
+  AWS_S3_REGION_NAME: "${AWS_S3_REGION_NAME:?Set AWS_S3_REGION_NAME}"
+  AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID}"
+  AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY}"
+  AWS_S3_ADDRESSING_STYLE: "virtual"
+  AWS_QUERYSTRING_EXPIRE: "3600"
+  AWS_REQUEST_CHECKSUM_CALCULATION: "when_required"
+  AWS_RESPONSE_CHECKSUM_VALIDATION: "when_required"
+
+services:
+  postgres:
+    container_name: !reset null
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: "${LINODE_DB_PASSWORD:?Set LINODE_DB_PASSWORD}"
+
+  redis:
+    container_name: !reset null
+    ports: !reset []
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+  web:
+    container_name: !reset null
+    ports: !override
+      - "127.0.0.1:${LINODE_WEB_PORT:-18009}:8008"
+    restart: unless-stopped
+    environment:
+      <<: *linode-runtime
+
+  dispatcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      target: dispatcher
+    command: ["python", "manage.py", "runworker"]
+    restart: unless-stopped
+    stop_grace_period: 11m
+    environment:
+      <<: *linode-runtime
+      VAST_ENDPOINT_NAME: "${VAST_ENDPOINT_NAME:-deployment-whats-the-tab-3060-default}"
+      VAST_API_KEY: "${VAST_API_KEY:?Set VAST_API_KEY}"
+    depends_on:
+      web:
+        condition: service_healthy
+
+volumes:
+  redis_data:

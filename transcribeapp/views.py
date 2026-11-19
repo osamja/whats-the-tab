@@ -388,10 +388,7 @@ def get_midi(request, audio_midi_id):
         if not audio_midi.midi_file:
             raise Http404("No MIDI file found for this transcription.")
 
-        midi_url = audio_midi.midi_file.url
-        if midi_url.startswith(("http://", "https://")):
-            return HttpResponseRedirect(midi_url)
-
+        # The frontend reads the preview with fetch, so keep it on this origin.
         return FileResponse(
             audio_midi.midi_file.open(),
             content_type="audio/midi",
