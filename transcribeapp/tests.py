@@ -217,6 +217,28 @@ class TranscribeApiTests(TestCase):
         self.assertGreaterEqual(field.max_length, len("youtube_audio_downloaded"))
 
 
+class MidiPreviewTests(TestCase):
+    @patch("django.db.models.fields.files.FieldFile.open")
+    @patch("django.db.models.fields.files.FieldFile.url", new_callable=PropertyMock)
+    def test_preview_serves_private_object_on_the_application_origin(self, signed_url, open_file):
+        signed_url.return_value = "https://media.example.test/preview.midi?signed=1"
+        midi_bytes = b"MThd"
+        open_file.return_value = BytesIO(midi_bytes)
+        job = AudioMIDI.objects.create(
+            audio_filename="test.wav",
+            audio_file="audios/test.wav",
+            midi_file="midi/test.midi",
+            status=AudioMIDI.Status.COMPLETED,
+        )
+
+        response = self.client.get(reverse("get_midi", args=[job.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "audio/midi")
+        self.assertEqual(b"".join(response.streaming_content), midi_bytes)
+        signed_url.assert_not_called()
+
+
 class PruneJobsTests(TestCase):
     def test_prune_jobs_dry_run_and_delete(self):
         job = AudioMIDI.objects.create(audio_filename="old.wav")

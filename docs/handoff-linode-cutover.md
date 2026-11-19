@@ -180,3 +180,33 @@ through Linode and Vast, the result stays in private storage, the measured
 latency is acceptable, and the operator can restore the old route. Record
 the deployed commit, image digest, endpoint, Compose and nginx config
 locations, smoke test outcomes, and rollback command in the handoff notes.
+
+## Linode Compose configuration
+
+Run these commands from the checkout on Linode. Use Compose v2.24.4 or
+newer for the port overrides. Keep the environment file outside the
+checkout and readable only by the deployment account.
+
+Set `SECRET_KEY`, `WORKER_SHARED_SECRET`, and `LINODE_DB_PASSWORD` to
+independent random values. Use a URL-safe database password, such as
+`openssl rand -hex 32`. Supply `VAST_API_KEY` and the five required
+`AWS_*` variables from the private bucket configuration. The override
+defaults to the verified RTX 3060 endpoint and stages Django on
+`127.0.0.1:18009`. Set `LINODE_WEB_PORT` if that port is in use.
+The frontend checkout sends requests without a client API key. Leave
+`TRANSCRIBE_API_KEY` empty unless the frontend is updated to supply one.
+
+```bash
+compose=(docker compose -p whatsthetab-linode --env-file "$LINODE_ENV_FILE"
+  -f docker-compose.yml -f docker-compose.linode.yml)
+"${compose[@]}" config --quiet
+"${compose[@]}" up --build -d --wait
+"${compose[@]}" ps
+curl --fail --silent http://127.0.0.1:18009/transcribe/ready/
+```
+
+Wait for `workers_online` to reach 1 before submitting the smoke job.
+PostgreSQL and Redis stay on the project network. For nginx verification,
+attach only web to the proxy network using a unique alias after the private
+smoke test. Keep the attachment in the deployed Compose configuration so
+it survives container replacement.

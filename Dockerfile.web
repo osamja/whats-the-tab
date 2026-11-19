@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -26,3 +26,10 @@ RUN mkdir -p media/audios media/midi \
 EXPOSE 8008
 
 CMD ["/app/entrypoint.sh"]
+
+FROM base AS dispatcher
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && uv pip install --python /app/.venv/bin/python -r deploy/vast/requirements.txt
+
+FROM base AS web
