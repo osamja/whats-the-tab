@@ -15,6 +15,8 @@ uploads it through Django's authenticated result callback.
    URL, for example `whats-the-tab-media.us-lax-4.linodeobjects.com`. The
    worker accepts HTTPS on that host and follows no redirects. Match
    `MAX_AUDIO_DURATION_SECONDS` to the web and dispatcher settings.
+   To run a hardware comparison alongside the default deployment, set
+   `VAST_DEPLOYMENT_NAME=whats-the-tab-3060` and `VAST_GPU_NAME="RTX 3060"`.
 3. From the repository root, register the deployment. The pinned SDK uses a
    Python 3.12 API during provisioning. The Django dispatcher and worker
    image use Python 3.11.
@@ -24,9 +26,9 @@ uploads it through Django's authenticated result callback.
      python -m deploy.vast.deployment
    ```
 
-4. Find the endpoint associated with `whats-the-tab` in the Vast console.
-   Use its displayed endpoint name for `VAST_ENDPOINT_NAME`. The deployment
-   initially caps scaling at one RTX 4090 and requests zero cold workers.
+4. Find the deployment's endpoint in the Vast console. Use its displayed
+   endpoint name for `VAST_ENDPOINT_NAME`. Each deployment caps scaling at
+   one GPU and requests zero cold workers. The default GPU is an RTX 4090.
    Its autoscaling benchmark runs a generated four-second melody.
 
 See the [Vast Deployments configuration documentation](https://docs.vast.ai/guides/serverless/deployments/configuration).
@@ -56,8 +58,8 @@ uv pip install -r deploy/vast/requirements.txt
 ```
 
 Keep the Vast key in the provisioning and dispatcher environments. The GPU
-worker receives only the audio host and duration setting in its deployment
-configuration. YouTube download jobs still run on the dispatcher, where
+worker receives the deployment name, audio host, and duration setting in its
+deployment configuration. YouTube download jobs still run on the dispatcher, where
 `ffmpeg` is needed if the source requires postprocessing.
 
 To switch back, clear `VAST_ENDPOINT_NAME` and run `runworker` on a host
@@ -79,3 +81,24 @@ before switching if all new jobs should use local inference.
 Keep the signed URL lifetime longer than the maximum dispatch wait. The
 dispatcher sends start and finish progress for Vast jobs. Local inference
 continues to report per-chunk progress.
+
+### RTX 4090 and RTX 3060 staging comparison
+
+Both endpoints ran the same worker image digest and processed the same inputs
+through separate staging queues. Both returned byte-identical MIDI for the
+four-second melody (4 notes) and the 71-second piano recording (730 notes).
+
+| GPU | Selected host rate | Cold melody | Warm piano | Estimated cost of warm run |
+| --- | ---: | ---: | ---: | ---: |
+| RTX 4090 | $0.486/hr | 438.28 s | 17.24 s | $0.00233 |
+| RTX 3060 | $0.070/hr | 392.68 s | 37.38 s | $0.00073 |
+
+Times are measured from enqueue to MIDI download. The first request included
+image pull and worker initialization on each host. The estimated cost is the
+host's hourly rate multiplied by elapsed time and excludes idle time. In this
+test the RTX 3060 took about 2.2 times as long on warm piano and cost about
+69% less. Cold startup was several minutes on both hosts.
+
+After a staging run, stop the deployment through Vast to release its workers.
+The autoscaler can restart an instance stopped individually while the
+deployment remains active.
