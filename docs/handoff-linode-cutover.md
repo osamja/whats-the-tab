@@ -241,8 +241,14 @@ it survives container replacement.
   one-worker cap. It rented an RTX 3060 at $0.107/hr. The worker logs
   showed retries on layer `8ac6d7d2262f`, which is 6.15 GiB compressed,
   while the worker remained in loading. Its cold melody timed out after
-  600.52 seconds. No Linode job produced a GPU-generated MIDI, so warm
-  timing and malformed-audio recovery could not be measured.
+  600.52 seconds. The layer later downloaded. A retry on the same rental
+  timed out after 600.45 seconds while Vast's runtime wrapper was still
+  installing Ubuntu packages. No Linode job produced a GPU-generated
+  MIDI, so warm timing and malformed-audio recovery could not be measured.
+- Both Vast deployments reported stopped. Rental `61382539` exited.
+  Vast accepted the stop for `61393059` and reported its desired and
+  current state as stopped, but the worker's actual status was still
+  loading on the last check. Its exit remained unconfirmed.
 - The disposable job rows and bucket objects were removed. The dispatcher
   was restored to its original endpoint configuration. Public routing
   still points to the legacy upstream. Cutover requires a successful
