@@ -1,10 +1,18 @@
 # Handoff for the Linode cutover
 
-Deploy the tested RTX 3060-backed transcription stack on Linode. Prove the
-audio-to-MIDI flow on a Linode-only origin before changing public nginx
-routing. The repo is open source. Keep docs, commits, workflow logs, and issue
-reports suitable for public visibility. Store real credentials and presigned
-URLs outside Git and redact them from test evidence.
+## Objective and next step
+
+Restore public audio-to-MIDI transcription through Linode and Vast. Cut over
+after a private upload produces a playable, downloadable MIDI and a valid
+job succeeds after a corrupt upload. Verify the public path and keep the
+nginx rollback ready.
+
+The private Linode stack is healthy. With one idle RTX 3060, the dispatcher could not establish
+the SDK connection. The replacement never became ready. The exact socket
+error is still unknown. With a healthy worker, probe the address and port
+returned by Vast before running the private smoke test.
+
+Keep credentials and presigned URLs out of Git and public test evidence.
 
 ```mermaid
 flowchart LR
@@ -286,3 +294,10 @@ original endpoint configuration, the tagged deployment was stopped, rental
 The next test needs to verify that Linode can connect to the worker address
 and port returned by Vast routing while that worker is idle. Then run the
 private audio-to-MIDI smoke suite before changing public nginx routing.
+
+On 2026-11-20, Vast assigned replacement rental `61585795`. Its host went
+offline, then resumed startup and retried image downloads after an unexpected
+EOF. It never became ready within 20 minutes, so the socket probe could not
+run. Deployment `5792` was stopped. Vast marked the rental stopped, but its
+last actual status was still loading. Private readiness passed and the public
+legacy upstream still returned HTTP 502.
