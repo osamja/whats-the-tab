@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 664" role="img" aria-labelledby="title description">
+  <title id="title">From audio to MIDI</title>
+  <desc id="description">The browser uploads audio through nginx. Django checks the file, saves it in private storage, and queues a job in Redis. A Linode dispatcher sends a signed audio URL to one of two warm RTX 3060 workers on Vast. A GTX 1080 Ti is available as standby. The dispatcher reports the MIDI to Django, and the browser previews or downloads it.</desc>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#151728"/>
+      <stop offset="1" stop-color="#101523"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 1 8 5 0 9" fill="none" stroke="#8492b2" stroke-width="1.8"/>
+    </marker>
+    <style>
+      text { font-family: system-ui, sans-serif; }
+      .title { font-size: 38px; font-weight: 700; fill: #f5f5ff; }
+      .step { font-size: 25px; font-weight: 650; fill: #f5f5ff; }
+      .detail { font-size: 18px; fill: #d1d9ee; }
+      .tag { font-size: 15px; font-weight: 650; letter-spacing: 0.9px; }
+      .card { fill: #1d2438; stroke: #343f58; stroke-width: 1.2; }
+      .track { stroke: #8492b2; stroke-width: 2; marker-end: url(#arrow); }
+      .icon { fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+
+  <rect width="800" height="664" rx="26" fill="url(#background)"/>
+  <text x="48" y="61" class="title">From audio to MIDI</text>
+  <text x="49" y="91" class="detail">Pyaar.ai transcription pipeline</text>
+
+  <path d="M78 206v22" class="track"/>
+  <path d="M78 336v22" class="track"/>
+  <path d="M78 487v22" class="track"/>
+
+  <rect x="47" y="112" width="706" height="94" rx="16" class="card"/>
+  <g color="#aca2ff" transform="translate(59 131)">
+    <rect width="39" height="39" rx="11" fill="#34305c"/>
+    <path class="icon" d="M19.5 27V12m-6 6 6-6 6 6M11 26v3h17v-3"/>
+  </g>
+  <text x="114" y="151" class="step">Upload audio</text>
+  <text x="114" y="180" class="detail">The browser sends a recording to Django through nginx.</text>
+  <text x="723" y="147" text-anchor="end" class="tag" fill="#bfb5ff">BROWSER</text>
+
+  <rect x="47" y="230" width="706" height="106" rx="16" class="card"/>
+  <g color="#8ed7ff" transform="translate(59 249)">
+    <rect width="39" height="39" rx="11" fill="#223d59"/>
+    <path class="icon" d="M12 13h15M12 19.5h15M12 26h15"/>
+  </g>
+  <text x="114" y="269" class="step">Validate and queue</text>
+  <text x="114" y="298" class="detail">Django checks the audio and saves it in private storage.</text>
+  <text x="114" y="322" class="detail">PostgreSQL holds job status. Redis queues the job.</text>
+  <text x="723" y="265" text-anchor="end" class="tag" fill="#8ed7ff">LINODE</text>
+
+  <rect x="47" y="360" width="706" height="127" rx="16" class="card"/>
+  <g color="#95eac8" transform="translate(59 379)">
+    <rect width="39" height="39" rx="11" fill="#234747"/>
+    <path class="icon" d="M11 20h4l3-7 3 14 3-7h4"/>
+  </g>
+  <text x="114" y="399" class="step">Transcribe on a GPU</text>
+  <text x="114" y="428" class="detail">A dispatcher signs an audio URL and calls a Vast worker.</text>
+  <text x="114" y="454" class="detail">Two RTX 3060s serve jobs. A GTX 1080 Ti is on standby.</text>
+  <text x="723" y="395" text-anchor="end" class="tag" fill="#95eac8">VAST</text>
+
+  <rect x="47" y="511" width="706" height="105" rx="16" class="card"/>
+  <g color="#ffd297" transform="translate(59 530)">
+    <rect width="39" height="39" rx="11" fill="#514035"/>
+    <path class="icon" d="M19.5 12v15m-6-6 6 6 6-6M11 28v3h17v-3"/>
+  </g>
+  <text x="114" y="550" class="step">Preview or download MIDI</text>
+  <text x="114" y="579" class="detail">The dispatcher returns the MIDI to Django. The browser</text>
+  <text x="114" y="603" class="detail">checks job status and loads the result when it’s ready.</text>
+  <text x="723" y="546" text-anchor="end" class="tag" fill="#ffd297">RESULT</text>
+</svg>

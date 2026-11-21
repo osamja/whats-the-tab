@@ -8,25 +8,7 @@ then preview or download the MIDI. [Try it on Pyaar.ai](https://pyaar.ai).
 Django checks that an upload contains readable audio and queues transcription
 in Redis. A GPU runs MT3 inference while the browser polls for the result.
 
-```mermaid
-flowchart LR
-    Browser["Pyaar.ai"] <-->|"Upload, status, MIDI"| Nginx["nginx"]
-    subgraph Linode
-        Nginx <--> Web["Django"]
-        Web --> DB[("PostgreSQL")]
-        Web -->|"Queue job"| Redis[("Redis")]
-        Redis --> D1["Primary dispatcher"]
-        Redis --> D2["Secondary dispatcher"]
-        D1 -->|"Report result"| Web
-        D2 -->|"Report result"| Web
-    end
-    Web <-->|"Audio and MIDI"| Storage[("Private object storage")]
-    D1 <-->|"Signed audio URL / MIDI"| G1["Vast RTX 3060"]
-    D2 <-->|"Signed audio URL / MIDI"| G2["Vast RTX 3060"]
-    Storage -->|"Audio"| G1
-    Storage -->|"Audio"| G2
-    D2 -.->|"Alternative GPU"| G3["Vast GTX 1080 Ti standby"]
-```
+[![From audio to MIDI: the upload, queue, GPU, and download flow](docs/transcription-flow.svg)](docs/transcription-flow.svg)
 
 ## Run locally
 
