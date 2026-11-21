@@ -1,179 +1,76 @@
 # whats-the-tab
 
-A music transcription API that converts audio to MIDI, built on a from-scratch PyTorch reimplementation of Google's [MT3](https://github.com/magenta/mt3) (Multi-Task Multitrack Music Transcription). The original MT3 is written in JAX/T5X; this project rewrites the model and inference pipeline in pure PyTorch and wraps it in a Django REST API.
+Turn music recordings into MIDI. Upload an audio file, wait for transcription,
+then preview or download the MIDI. [Try it on Pyaar.ai](https://pyaar.ai).
 
 ## How it works
 
-1. Upload an audio file (MP3, WAV, etc.) or provide a YouTube URL
-2. The MT3 model processes the audio spectrogram through a T5-style encoder-decoder transformer
-3. The decoder autoregressively generates MIDI note events
-4. Download the resulting MIDI file
+Django checks that an upload contains readable audio and queues transcription
+in Redis. A GPU runs MT3 inference while the browser polls for the result.
 
-## Setup
-
-### Prerequisites
-
-- Python 3.11+
-- [uv](https://github.com/astral-sh/uv) package manager
-- GPU with 8GB+ VRAM (GTX 1080 or better) for inference
-- PyTorch model checkpoint: `pytorch_mt3/mt3_pytorch_checkpoint.pt` (auto-downloaded/converted if missing)
-
-### Environment variables
-
-Copy `.env.example` to `.env` and fill in your values:
-
-```bash
-cp .env.example .env
+```mermaid
+flowchart LR
+    Browser["Pyaar.ai"] <-->|"Upload, status, MIDI"| Nginx["nginx"]
+    subgraph Linode
+        Nginx <--> Web["Django"]
+        Web --> DB[("PostgreSQL")]
+        Web -->|"Queue job"| Redis[("Redis")]
+        Redis --> D1["Primary dispatcher"]
+        Redis --> D2["Secondary dispatcher"]
+        D1 -->|"Report result"| Web
+        D2 -->|"Report result"| Web
+    end
+    Web <-->|"Audio and MIDI"| Storage[("Private object storage")]
+    D1 <-->|"Signed audio URL / MIDI"| G1["Vast RTX 3060"]
+    D2 <-->|"Signed audio URL / MIDI"| G2["Vast RTX 3060"]
+    Storage -->|"Audio"| G1
+    Storage -->|"Audio"| G2
+    D2 -.->|"Alternative GPU"| G3["Vast GTX 1080 Ti standby"]
 ```
 
-At minimum you need `SECRET_KEY` set. See `.env.example` for all options.
+## Run locally
 
-### Local development
-
-```bash
-uv sync --frozen --no-dev --no-install-project
-uv run python manage.py migrate
-DEBUG=True uv run python manage.py runserver 0.0.0.0:8008
-```
-
-Uploaded audio and generated MIDI files are stored under `media/`.
-
-Transcription jobs require Redis (`REDIS_URL`) and a worker process:
-`uv run python manage.py runworker`. A Redis server is included in the Docker
-Compose setup; for bare-metal development, start one locally or point
-`REDIS_URL` at a managed instance.
-
-### Docker
+For local inference, install Docker Compose and configure Docker with the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
 ```bash
-# Web, Postgres, and Redis
-docker compose up --build postgres redis web
-
-# Add the GPU transcription worker
 docker compose --profile gpu up --build
 ```
 
-The app is available at `http://127.0.0.1:8008` and Redis runs in a sidecar container.
-See the [Compose validation guide](docs/local-compose.md) for the service
-diagram, test suite, and audio-to-MIDI smoke test.
+The API is available at `http://127.0.0.1:8008`. To run only Django,
+PostgreSQL, and Redis, use `docker compose up --build web`. See the
+[local Compose guide](docs/local-compose.md) for the smoke test and test suite.
 
-The GPU profile requires the NVIDIA Container Toolkit and a configured Docker
-GPU runtime. Without it, run the web stack only or run the worker directly with
-`uv run python manage.py runworker`.
-
-The worker image can also be built and pushed to GHCR with the
-`Worker Image` GitHub Actions workflow (`.github/workflows/worker-image.yml`),
-or manually:
+## Use the API
 
 ```bash
-docker build -f Dockerfile -t ghcr.io/osamja/whats-the-tab-worker:latest .
-docker push ghcr.io/osamja/whats-the-tab-worker:latest
+base=http://127.0.0.1:8008/transcribe
+curl -F 'audio=@song.mp3' "$base/upload/"
 ```
 
-### Media storage
-
-By default, audio and MIDI files live under `media/` (Docker Compose uses a
-named volume). For a web tier and GPU workers on different hosts, configure an
-S3-compatible bucket such as Cloudflare R2 or Linode Object Storage with
-`AWS_STORAGE_BUCKET_NAME` and the related settings in `.env.example`. Files are
-served with time-limited presigned URLs, so workers never need shared filesystem
-access.
-
-See [`docs/object-storage.md`](docs/object-storage.md) for a Linode Object
-Storage walkthrough, the boto3 checksum workaround, and troubleshooting.
-
-### Production deployment
+Set `id` to the returned `audio_midi_id`, then queue the job and check its status.
 
 ```bash
-uv run python manage.py migrate
-uv run python manage.py collectstatic --noinput
-uv run gunicorn --bind 0.0.0.0:8080 --workers 1 --threads 2 --worker-class gthread --timeout 300 musictranscription.wsgi
+id=123
+curl -d "audio_midi_id=$id" "$base/generate/"
+curl "$base/status/$id/"
 ```
 
-- The web process only handles HTTP, status polling, and media; it does not perform GPU inference.
-- The GPU worker runs separately: `uv run python manage.py runworker`.
-- `WORKER_SHARED_SECRET` must be identical in the web and worker environments; it authenticates worker result callbacks.
-- Django does not serve `/media/` unless `DEBUG=True` or `SERVE_MEDIA=True`. In production, serve media through nginx or object storage; only set `SERVE_MEDIA=True` for simple deployments that need Django to serve it.
-- `runworker` polls Redis for jobs, writes real-time progress, reaps stale jobs from dead workers, and retries interrupted jobs up to `TASK_MAX_RETRIES`.
-
-For Linode with Vast GPU inference, follow the [Vast Serverless runbook](docs/vast-serverless.md). The [single Vast instance runbook](docs/vast-deploy.md) covers the older all-in-one deployment.
-
-### Retention
-
-Delete completed jobs and their audio/MIDI files after a retention window:
+Once the status is `completed`, download the MIDI.
 
 ```bash
-uv run python manage.py prune_jobs --days 7
+curl -fL "$base/download_midi/$id/" -o song.midi
 ```
 
-Run this from cron/systemd or a scheduled job. Use `--dry-run` first to see how
-many records would be removed.
+## Deployment
 
-## API
+- [Linode cutover and rollback](docs/handoff-linode-cutover.md)
+- [Vast Serverless GPU setup](docs/vast-serverless.md)
+- [Private object storage](docs/object-storage.md)
+- [Configuration options](.env.example)
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/transcribe/` | GET | Liveness check |
-| `/transcribe/ready/` | GET | Readiness check (DB, Redis, worker heartbeats) |
-| `/transcribe/upload/` | POST | Upload an MP3 file |
-| `/transcribe/upload_from_yt/` | POST | Upload via YouTube URL |
-| `/transcribe/generate/` | POST | Start MIDI transcription |
-| `/transcribe/status/<id>/` | GET | Poll transcription progress (`current_chunk`/`total_chunks`) |
-| `/transcribe/midi/<id>/` | GET | Get MIDI file (binary) |
-| `/transcribe/download_midi/<id>/` | GET | Download MIDI as attachment |
-| `/transcribe/_result/` | POST | Internal worker result callback (requires `X-Worker-Token`) |
-| `/transcribe/metrics/` | GET | Internal queue/Redis metrics |
-
-If `TRANSCRIBE_API_KEY` is set, every client-facing endpoint requires either
-`X-API-Key: <key>` or `Authorization: Bearer <key>`. The health/readiness
-endpoints and the internal worker callback remain open/protected separately.
-
-### Example
-
-```bash
-# Upload audio
-curl -F "audio=@song.mp3" http://127.0.0.1:8008/transcribe/upload/
-
-# Start transcription (use audio_midi_id from upload response)
-curl -X POST -d "audio_midi_id=<ID>" http://127.0.0.1:8008/transcribe/generate/
-
-# Check progress
-curl http://127.0.0.1:8008/transcribe/status/<ID>/
-
-# Download MIDI
-curl -o output.midi http://127.0.0.1:8008/transcribe/download_midi/<ID>/
-```
-
-## Architecture
-
-![Target architecture](docs/architecture.svg)
-
-See [docs/architecture.md](docs/architecture.md) for the request lifecycle and
-Mermaid diagrams.
-
-- **ML backend:** `transcribeapp/ml_pytorch.py` — PyTorch MT3 inference
-- **Model:** `pytorch_mt3/pytorch_model.py` — T5 1.1 encoder-decoder (8 layers, 512 dim, 6 heads)
-- **Spectrogram:** `pytorch_mt3/pytorch_spectrograms.py` — log-mel spectrogram matching MT3's spectral_ops
-- **Decoding:** `pytorch_mt3/mt3_decoding/` — vendored from MT3, TF/seqio/t5 dependencies removed
-- **Checkpoint conversion:** `pytorch_mt3/convert_jax_to_pytorch.py` — JAX T5X to PyTorch state dict
-- **Async tasks:** Redis-backed queue + `runworker` management command
-
-## Acknowledgments
-
-This project is a derivative work of [MT3](https://github.com/magenta/mt3) by Google's Magenta team. The model architecture, training methodology, and decoding logic are based on their work. Vendored decoding modules retain the original copyright headers.
-
-If you use this project in research, please cite the original MT3 paper:
-
-```bibtex
-@inproceedings{gardner2022mt3,
-  title={MT3: Multi-Task Multitrack Music Transcription},
-  author={Gardner, Josh and Simon, Ian and Manilow, Ethan and Hawthorne, Curtis and Engel, Jesse},
-  booktitle={International Conference on Learning Representations (ICLR)},
-  year={2022},
-  url={https://openreview.net/forum?id=iMSjopcOn0p}
-}
-```
-
-## License
+The transcription model is a PyTorch reimplementation of
+[Google Magenta's MT3](https://github.com/magenta/mt3). For research, cite the
+[original MT3 paper](https://openreview.net/forum?id=iMSjopcOn0p).
 
 [Apache License 2.0](LICENSE)
