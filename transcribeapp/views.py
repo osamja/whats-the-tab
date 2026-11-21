@@ -1,5 +1,8 @@
 import hmac
 import os
+import shutil
+import subprocess
+import tempfile
 import uuid
 
 from django.conf import settings
@@ -10,6 +13,37 @@ from .models import AudioMIDI
 from .queue import enqueue_task, get_redis
 from .ratelimit import check_rate_limit
 from .tasks import get_audio_filename
+
+UPLOAD_FORMATS = (
+    "aac,ac3,aiff,amr,ape,asf,avi,caf,eac3,flac,flv,matroska,webm,"
+    "mov,mp4,m4a,3gp,3g2,mj2,mp3,mpeg,mpegts,ogg,tta,wav,wv"
+)
+
+
+def _upload_has_decodable_audio(audio_file):
+    # Restrict probing to local media containers and decode only the first frame.
+    with tempfile.NamedTemporaryFile() as source:
+        try:
+            shutil.copyfileobj(audio_file, source)
+        finally:
+            audio_file.seek(0)
+        source.flush()
+        try:
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist",
+                    "file", "-format_whitelist", UPLOAD_FORMATS, "-i",
+                    source.name, "-map", "0:a:0", "-frames:a", "1", "-ac", "1",
+                    "-ar", "8000", "-f", "s16le", "pipe:1",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False
+    return result.returncode == 0 and bool(result.stdout)
 
 
 def health(request):
@@ -125,6 +159,15 @@ def upload_audio(request):
                 {"error": f"Unsupported audio content type: {content_type}"},
                 status=415,
             )
+
+        try:
+            readable = _upload_has_decodable_audio(audio_file)
+        except OSError:
+            message = "Audio validation is temporarily unavailable. Please try again."
+            return JsonResponse({"error": message, "message": message}, status=503)
+        if not readable:
+            message = "This file does not contain readable audio. Try exporting a fresh MP3."
+            return JsonResponse({"error": message, "message": message}, status=422)
 
         audio_filename = get_audio_filename()
 

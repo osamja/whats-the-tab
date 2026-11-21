@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev curl \
+    libpq-dev curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -28,8 +28,6 @@ EXPOSE 8008
 CMD ["/app/entrypoint.sh"]
 
 FROM base AS dispatcher
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/* \
-    && uv pip install --python /app/.venv/bin/python -r deploy/vast/requirements.txt
+RUN uv pip install --python /app/.venv/bin/python -r deploy/vast/requirements.txt
 
 FROM base AS web

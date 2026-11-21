@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import uuid
+import wave
 from datetime import timedelta
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -187,6 +188,32 @@ class UploadApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 415)
+
+    def test_upload_rejects_invalid_mp3_before_saving(self):
+        response = self.client.post(
+            reverse("upload_audio"),
+            {"audio": SimpleUploadedFile("bad.mp3", b"not audio", "audio/mpeg")},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("readable audio", response.json()["message"])
+        self.assertFalse(AudioMIDI.objects.exists())
+
+    def test_upload_keeps_all_bytes_after_validation(self):
+        audio = BytesIO()
+        with wave.open(audio, "wb") as wav:
+            wav.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+            wav.writeframes(b"\x01\x00" * 800)
+        data = audio.getvalue()
+        with tempfile.TemporaryDirectory() as media_root, self.settings(MEDIA_ROOT=media_root):
+            response = self.client.post(
+                reverse("upload_audio"),
+                {"audio": SimpleUploadedFile("valid.wav", data, "audio/wav")},
+            )
+            self.assertEqual(response.status_code, 200)
+            job = AudioMIDI.objects.get(pk=response.json()["audio_midi_id"])
+            with job.audio_file.open("rb") as stored:
+                self.assertEqual(stored.read(), data)
 
 
 class TranscribeApiTests(TestCase):
