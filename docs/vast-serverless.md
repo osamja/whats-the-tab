@@ -17,6 +17,9 @@ uploads it through Django's authenticated result callback.
    `MAX_AUDIO_DURATION_SECONDS` to the web and dispatcher settings.
    To run a hardware comparison alongside the default deployment, set
    `VAST_DEPLOYMENT_NAME=whats-the-tab-3060` and `VAST_GPU_NAME="RTX 3060"`.
+   To admit multiple GPU models in one deployment, use a comma-separated
+   list such as `VAST_GPU_NAME="RTX 3060,GTX 1080 Ti"`. Validate a private
+   audio-to-MIDI job on the GTX 1080 Ti before relying on it for capacity.
 3. From the repository root, register the deployment. The pinned SDK uses a
    Python 3.12 API during provisioning. The Django dispatcher and worker
    image use Python 3.11.

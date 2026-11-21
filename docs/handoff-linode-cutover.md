@@ -18,8 +18,9 @@ Keep credentials and presigned URLs out of Git and public test evidence.
 ## Operating target
 
 Expect up to 10 asynchronous jobs per day. First prove private end-to-end
-transcription with a short melody and a representative song. Defer reliability
-targets, retry policy, and GPU cost tuning until that flow works.
+transcription with a short melody and a representative song. Keep at least
+two verified GPU workers active. Leave a worker running after it passes a
+transcription test. Clean up disposable jobs and media independently.
 
 ```mermaid
 flowchart LR
@@ -186,9 +187,8 @@ the development baseline. Before starting it on Linode, configure the following.
 4. If the public path fails or latency exceeds the agreed threshold, restore
    the prior nginx config, validate, reload, and verify the old route. Keep the
    new database, bucket objects, and queued jobs available for reconciliation.
-   Avoid treating new job IDs as legacy IDs. If stopping the test backend,
-   stop the Vast **deployment** and confirm its worker exits. Stopping just
-   the rented instance caused the autoscaler to restart it during staging.
+   Avoid treating new job IDs as legacy IDs. Keep verified GPU capacity
+   active during routing rollback so it remains available for reconciliation.
 
 Done means the public client completes a real HTTPS upload-to-MIDI request
 through Linode and Vast, the result stays in private storage, the measured
