@@ -16,13 +16,23 @@ from vastai import Deployment
 from vastai.data.query import RTX_4090, gpu_name, num_gpus
 
 deployment_name = os.getenv("VAST_DEPLOYMENT_NAME", "whats-the-tab")
-deployment_gpu = os.getenv("VAST_GPU_NAME", RTX_4090)
+deployment_gpus = [
+    name.strip() for name in os.getenv("VAST_GPU_NAME", RTX_4090).split(",")
+    if name.strip()
+]
+if not deployment_gpus:
+    raise ValueError("Set VAST_GPU_NAME to at least one GPU model")
 app = Deployment(name=deployment_name)
 image = app.image(
     os.getenv("VAST_WORKER_IMAGE", "ghcr.io/osamja/whats-the-tab-worker:latest"),
     storage=30,
 )
-image.venv("/app/.venv").require(gpu_name == deployment_gpu, num_gpus == 1)
+gpu_requirement = (
+    gpu_name == deployment_gpus[0]
+    if len(deployment_gpus) == 1
+    else gpu_name.in_(deployment_gpus)
+)
+image.venv("/app/.venv").require(gpu_requirement, num_gpus == 1)
 image.env(
     VAST_DEPLOYMENT_NAME=deployment_name,
     VAST_AUDIO_HOST=os.getenv("VAST_AUDIO_HOST", ""),
