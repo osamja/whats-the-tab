@@ -7,12 +7,19 @@ after a private upload produces a playable, downloadable MIDI and a valid
 job succeeds after a corrupt upload. Verify the public path and keep the
 nginx rollback ready.
 
-The private Linode stack is healthy. With one idle RTX 3060, the dispatcher could not establish
-the SDK connection. The replacement never became ready. The exact socket
-error is still unknown. With a healthy worker, probe the address and port
-returned by Vast before running the private smoke test.
+The private Linode stack is healthy. An earlier idle RTX 3060 was unreachable.
+On November 21, the dispatcher connected to a replacement RTX 3060 at the
+address supplied by Vast, and the inference probe returned HTTP 200.
+Both private audio uploads completed and produced playable, downloadable MIDI.
+Worker-failure recovery and public HTTPS verification remain open.
 
 Keep credentials and presigned URLs out of Git and public test evidence.
+
+## Operating target
+
+Expect up to 10 asynchronous jobs per day. First prove private end-to-end
+transcription with a short melody and a representative song. Defer reliability
+targets, retry policy, and GPU cost tuning until that flow works.
 
 ```mermaid
 flowchart LR
@@ -301,3 +308,20 @@ EOF. It never became ready within 20 minutes, so the socket probe could not
 run. Deployment `5792` was stopped. Vast marked the rental stopped, but its
 last actual status was still loading. Private readiness passed and the public
 legacy upstream still returned HTTP 502.
+
+### Private transcription proof on 2026-11-21
+
+RTX 3060 deployment `5792` and endpoint `45268` passed the exact-route TCP
+probe and inference request. The prewarmed rental was about $0.079/hour.
+
+| Private upload | MIDI notes | Enqueue to verified MIDI |
+| --- | ---: | ---: |
+| Four-second melody | 4 | 3.55 s |
+| 70-second rendered piano fixture | 338 | 25.93 s |
+
+Both previews matched the signed downloads, and unsigned MIDI requests
+returned 403. The disposable jobs and their private objects were removed.
+The RTX 3060 and RTX 4090 comparison deployments were stopped. The 3060
+exited, while the 4090 still reported loading with a requested stop at
+the last check. The dispatcher returned to its original configuration.
+Public transcription still returned 502 through the legacy upstream.
