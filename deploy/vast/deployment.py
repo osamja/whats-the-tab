@@ -22,7 +22,7 @@ deployment_gpus = [
 ]
 if not deployment_gpus:
     raise ValueError("Set VAST_GPU_NAME to at least one GPU model")
-app = Deployment(name=deployment_name)
+app = Deployment(name=deployment_name, tag=os.getenv("VAST_DEPLOYMENT_TAG", "default"))
 image = app.image(
     os.getenv("VAST_WORKER_IMAGE", "ghcr.io/osamja/whats-the-tab-worker:latest"),
     storage=30,
@@ -38,7 +38,12 @@ image.env(
     VAST_AUDIO_HOST=os.getenv("VAST_AUDIO_HOST", ""),
     MAX_AUDIO_DURATION_SECONDS=os.getenv("MAX_AUDIO_DURATION_SECONDS", "600"),
 )
-app.configure_autoscaling(max_workers=1, cold_workers=0, max_queue_time=300.0)
+app.configure_autoscaling(
+    max_workers=int(os.getenv("VAST_MAX_WORKERS", "1")),
+    min_load=float(os.getenv("VAST_MIN_LOAD", "0")),
+    cold_workers=0,
+    max_queue_time=300.0,
+)
 
 # YouTube jobs can produce larger files than the browser upload limit.
 MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024

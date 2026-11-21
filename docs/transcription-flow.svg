@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 664" role="img" aria-labelledby="title description">
   <title id="title">From audio to MIDI</title>
-  <desc id="description">The browser uploads audio through nginx. Django checks the file, saves it in private storage, and queues a job in Redis. A Linode dispatcher sends a signed audio URL to one of two warm RTX 3060 workers on Vast. A GTX 1080 Ti is available as standby. The dispatcher reports the MIDI to Django, and the browser previews or downloads it.</desc>
+  <desc id="description">The browser uploads audio through nginx. Django checks the file, saves it in private storage, and queues a job in Redis. Both Linode dispatchers use one Vast endpoint that can rent RTX 3060 or GTX 1080 Ti workers. Vast routes each request to a worker, and the dispatcher reports the resulting MIDI to Django for preview or download.</desc>
   <defs>
     <linearGradient id="background" x2="1" y2="1" gradientUnits="objectBoundingBox">
       <stop stop-color="#151728"/>
@@ -54,8 +54,8 @@
     <path class="icon" d="M11 20h4l3-7 3 14 3-7h4"/>
   </g>
   <text x="114" y="399" class="step">Transcribe on a GPU</text>
-  <text x="114" y="428" class="detail">A dispatcher signs an audio URL and calls a Vast worker.</text>
-  <text x="114" y="454" class="detail">Two RTX 3060s serve jobs. A GTX 1080 Ti is on standby.</text>
+  <text x="114" y="428" class="detail">Both dispatchers call one Vast endpoint with signed audio URLs.</text>
+  <text x="114" y="454" class="detail">Vast routes jobs to an RTX 3060 or GTX 1080 Ti worker.</text>
   <text x="723" y="395" text-anchor="end" class="tag" fill="#95eac8">VAST</text>
 
   <rect x="47" y="511" width="706" height="105" rx="16" class="card"/>

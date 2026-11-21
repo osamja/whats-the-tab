@@ -37,11 +37,10 @@ flowchart LR
     end
     Nginx -.->|"Legacy IDs"| Old["Legacy upstream · unavailable"]
     Web --> Bucket[("Private Linode Object Storage")]
-    D1 <-->|"Signed audio URL / MIDI"| G1["Vast RTX 3060"]
-    D2 <-->|"Signed audio URL / MIDI"| G2["Vast RTX 3060"]
-    G1 -->|"Fetch audio"| Bucket
-    G2 -->|"Fetch audio"| Bucket
-    Standby["Vast GTX 1080 Ti · verified standby"]
+    D1 <-->|"Route each request"| Pool["One Vast endpoint"]
+    D2 <-->|"Route each request"| Pool
+    Pool --> GPUs["Worker pool · RTX 3060 or GTX 1080 Ti"]
+    GPUs -->|"Fetch signed audio"| Bucket
 ```
 
 ## Starting point
@@ -367,3 +366,23 @@ the same MIDI bytes as the preview. Both Pyaar homepages and the adjacent
 `sammyjaved.com` homepage returned 200. Test jobs and objects were removed.
 Both serving RTX 3060 workers stayed running. Use the captured proxy config
 and rollback commands above if the public route needs to be restored.
+
+### Shared Vast endpoint on 2026-11-21
+
+Both Linode dispatchers now call `deployment-whats-the-tab-linode-pool`
+(deployment `6029`, endpoint `45687`). Its one workergroup admits verified
+single-GPU RTX 3060 and GTX 1080 Ti rentals. The endpoint uses
+`min_load=1000`, `max_workers=2`, and `cold_workers=0`. The load target
+is based on observed worker performance and the two-ready-worker test.
+
+Vast replaced one worker during startup without changing the endpoint.
+Two distinct workers each returned a valid four-note MIDI through the
+shared endpoint. After switching the dispatchers one at a time, two
+simultaneous uploads completed in 3.92 and 4.19 seconds, including download
+verification. The previous three deployments were stopped after cutover.
+
+To return to the previous layout, start deployments `5957` and `5792`
+and verify their workers. Set `VAST_ENDPOINT_NAME` to
+`deployment-whats-the-tab-3060-linode-b` and `VAST_SECONDARY_ENDPOINT_NAME`
+to `deployment-whats-the-tab-3060-linode`. Recreate only the dispatchers.
+nginx and the Linode job queue use the same configuration throughout.
