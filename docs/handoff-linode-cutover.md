@@ -11,7 +11,8 @@ The private Linode stack is healthy. An earlier idle RTX 3060 was unreachable.
 On November 21, the dispatcher connected to a replacement RTX 3060 at the
 address supplied by Vast, and the inference probe returned HTTP 200.
 Both private audio uploads completed and produced playable, downloadable MIDI.
-Worker-failure recovery and public HTTPS verification remain open.
+Public HTTPS transcription is live. The corrupt-upload recovery test passed.
+Recovery from a lost GPU worker remains unverified.
 
 Keep credentials and presigned URLs out of Git and public test evidence.
 
@@ -344,3 +345,20 @@ GTX 1080 Ti endpoint `45586` also passed a private melody upload. Its
 temporary dispatcher claimed job `13` and returned a four-note MIDI in
 3.89 seconds. The GPU was left running as a verified standby. The two
 RTX 3060 dispatchers remain the default queue consumers.
+
+### Public cutover on 2026-11-21
+
+Proxy commit `0515965` routes new transcription traffic to
+`whatsthetab-linode-origin:8008` on the shared Docker network. The Compose
+override declares the alias for future container replacement. Linode job IDs
+start at `1000000000000`. The proxy sends IDs of up to 12 digits and the old
+download routes to the legacy upstream, which still returns 502. Legacy data
+was not migrated. The worker result callback is private.
+
+A corrupt private upload failed and the next valid upload returned MIDI.
+A public HTTPS smoke job completed in 3.66 seconds. Headless Chromium loaded
+`www.pyaar.ai`, uploaded an MP3 through the actual frontend, and downloaded
+the same MIDI bytes as the preview. Both Pyaar homepages and the adjacent
+`sammyjaved.com` homepage returned 200. Test jobs and objects were removed.
+Both serving RTX 3060 workers stayed running. Use the captured proxy config
+and rollback commands above if the public route needs to be restored.

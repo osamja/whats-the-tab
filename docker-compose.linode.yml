@@ -45,6 +45,11 @@ services:
     restart: unless-stopped
     environment:
       <<: *linode-runtime
+    networks:
+      default:
+      proxy:
+        aliases:
+          - whatsthetab-linode-origin
 
   dispatcher: &linode-dispatcher
     build:
@@ -71,3 +76,8 @@ services:
 
 volumes:
   redis_data:
+
+networks:
+  proxy:
+    external: true
+    name: nginx_sammyjaved_proxy_prod_network
