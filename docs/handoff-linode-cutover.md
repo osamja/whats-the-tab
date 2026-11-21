@@ -25,18 +25,23 @@ transcription test. Clean up disposable jobs and media independently.
 
 ```mermaid
 flowchart LR
-    Browser["Browser"] --> Nginx["Linode nginx"]
+    Browser["Pyaar.ai browser"] --> Nginx["Linode nginx"]
     subgraph Linode
-        Nginx --> Web["Django + subscriber"]
+        Nginx -->|"New jobs"| Web["Django validates audio and serves MIDI"]
         Web --> DB[("PostgreSQL")]
         Web -->|"Enqueue"| Redis[("Redis")]
-        Redis -->|"Claim"| Dispatcher["CPU dispatcher"]
-        Dispatcher -->|"Authenticated MIDI callback"| Web
+        Redis --> D1["Primary dispatcher"]
+        Redis --> D2["Secondary dispatcher"]
+        D1 -->|"Private result callback"| Web
+        D2 -->|"Private result callback"| Web
     end
+    Nginx -.->|"Legacy IDs"| Old["Legacy upstream · unavailable"]
     Web --> Bucket[("Private Linode Object Storage")]
-    Dispatcher -->|"Fresh signed audio URL"| Vast["Vast RTX 3060"]
-    Vast -->|"Fetch audio"| Bucket
-    Vast -->|"Return MIDI"| Dispatcher
+    D1 <-->|"Signed audio URL / MIDI"| G1["Vast RTX 3060"]
+    D2 <-->|"Signed audio URL / MIDI"| G2["Vast RTX 3060"]
+    G1 -->|"Fetch audio"| Bucket
+    G2 -->|"Fetch audio"| Bucket
+    Standby["Vast GTX 1080 Ti · verified standby"]
 ```
 
 ## Starting point
