@@ -46,7 +46,7 @@ services:
     environment:
       <<: *linode-runtime
 
-  dispatcher:
+  dispatcher: &linode-dispatcher
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -56,11 +56,18 @@ services:
     stop_grace_period: 11m
     environment:
       <<: *linode-runtime
-      VAST_ENDPOINT_NAME: "${VAST_ENDPOINT_NAME:-deployment-whats-the-tab-3060-default}"
+      VAST_ENDPOINT_NAME: "${VAST_ENDPOINT_NAME:-deployment-whats-the-tab-3060-linode-b}"
       VAST_API_KEY: "${VAST_API_KEY:?Set VAST_API_KEY}"
     depends_on:
       web:
         condition: service_healthy
+
+  dispatcher_secondary:
+    <<: *linode-dispatcher
+    environment:
+      <<: *linode-runtime
+      VAST_ENDPOINT_NAME: "${VAST_SECONDARY_ENDPOINT_NAME:-deployment-whats-the-tab-3060-linode}"
+      VAST_API_KEY: "${VAST_API_KEY:?Set VAST_API_KEY}"
 
 volumes:
   redis_data:
