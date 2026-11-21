@@ -1,0 +1,26 @@
+REDDIT OR DISCORD
+
+I moved Pyaar.ai’s audio-to-MIDI transcription off one short-lived GPU rental
+
+I originally ran my transcription service on a single Vast instance. When that rental went away, transcription went with it. For this showcase, I migrated the existing app to Vast Serverless.
+
+Linode keeps the website, job queue, and private files. Dispatchers send signed audio links to Vast workers for MT3 inference and return the MIDI to the app. I verified parallel jobs on separate RTX 3060 hosts and a complete upload-to-MIDI run on a GTX 1080 Ti.
+
+The video shows a real upload and download on pyaar.ai. After the live run, the original audio spectrogram and the downloaded MIDI piano roll share the same time and pitch scales, so you can hear and see what the model picked up.
+
+I reused the existing Pyaar.ai app and its PyTorch reimplementation of Google Magenta’s MT3. The new work is the Serverless integration and the deployment that separates the app and job state from its GPU rentals.
+
+Try it: https://pyaar.ai
+Code: https://github.com/osamja/whats-the-tab/tree/f0a87d66ceba24789a131f5b3b3feb64c3265b91
+
+@vast_ai #BuiltOnVast
+On Reddit, also mention u/vast_ai in the post text.
+
+
+X
+
+I moved Pyaar.ai’s audio-to-MIDI app off one short-lived GPU rental. Linode keeps the queue and files, and Vast Serverless runs MT3 on replaceable workers.
+
+Watch a real upload, then compare the audio spectrum with the MIDI notes.
+
+https://pyaar.ai @vast_ai #BuiltOnVast
