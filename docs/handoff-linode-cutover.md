@@ -206,7 +206,7 @@ Set `SECRET_KEY`, `WORKER_SHARED_SECRET`, and `LINODE_DB_PASSWORD` to
 independent random values. Use a URL-safe database password, such as
 `openssl rand -hex 32`. Supply `VAST_API_KEY` and the five required
 `AWS_*` variables from the private bucket configuration. The override
-defaults to the verified RTX 3060 endpoint and stages Django on
+uses two dispatchers and stages Django on
 `127.0.0.1:18009`. Set `LINODE_WEB_PORT` if that port is in use.
 The frontend checkout sends requests without a client API key. Leave
 `TRANSCRIBE_API_KEY` empty unless the frontend is updated to supply one.
@@ -325,3 +325,17 @@ The RTX 3060 and RTX 4090 comparison deployments were stopped. The 3060
 exited, while the 4090 still reported loading with a requested stop at
 the last check. The dispatcher returned to its original configuration.
 Public transcription still returned 502 through the legacy upstream.
+
+### Two warm workers on 2026-11-21
+
+Linode runs two dispatchers on the same private Redis queue. The primary uses
+`deployment-whats-the-tab-3060-linode-b` (endpoint `45585`). The secondary
+uses `deployment-whats-the-tab-3060-linode` (endpoint `45268`). Each endpoint
+has `min_load=1`. Use `VAST_ENDPOINT_NAME` and
+`VAST_SECONDARY_ENDPOINT_NAME` to change the dispatcher endpoints.
+
+RTX 3060 rentals `61769935` and `61770053` ran on separate hosts. Each
+dispatcher claimed one of two simultaneous private melody jobs. Both
+returned four-note MIDI files in about 3.4 seconds from enqueue to verified
+download. The jobs and private objects were removed. Both workers were left
+running. Public routing was unchanged.
