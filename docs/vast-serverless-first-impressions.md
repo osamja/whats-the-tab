@@ -50,4 +50,23 @@ RTX 4090 comparison rental alone was listed at $0.3711 per hour. A warm
 capacity target also keeps a worker running when the queue is empty, so a
 quiet app can still have a steady bill. [Vast pricing](https://docs.vast.ai/guides/pricing) · [Vast scaling](https://docs.vast.ai/guides/serverless/managing-scale)
 
+## Feedback for the Serverless team
+
+1. **Make worker reachability visible.** Vast assigned an idle worker, but
+   Linode couldn't connect to its inference address. Expose a reachability
+   check for the advertised address and port, and include the underlying
+   socket error in the SDK's diagnostic output.
+2. **Show cold-start progress.** One worker exceeded our 10-minute job
+   deadline during setup. Show time spent pulling the image, installing the
+   runtime, and loading the model so operators can decide when to wait or
+   replace a worker.
+3. **Show capacity and cost together.** An unavailable rental lingered
+   while we waited for a replacement. Later, five rentals were running
+   while two served the live queue. Show which workers count against
+   capacity, what they cost per hour, and whether a requested stop has
+   taken effect.
+
+Reachability is the first thing I'd improve. A worker that appears ready
+but can't accept a request was the hardest failure to diagnose.
+
 [Architecture diagram](transcription-flow.svg) · [Test and cutover evidence](handoff-linode-cutover.md)
