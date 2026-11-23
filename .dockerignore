@@ -3,6 +3,7 @@
 .agents
 .aws
 .codex
+codex-session-*.md
 .venv
 venv
 __pycache__/

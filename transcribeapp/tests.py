@@ -150,6 +150,19 @@ class WorkerDispatchTests(TestCase):
         with patch.dict(sys.modules, {"vastai": SimpleNamespace(Serverless=lambda **_: serverless)}):
             endpoint.request.return_value = {
                 "status": 200,
+                "response": {
+                    "result": {
+                        "ok": {
+                            "type": "dict",
+                            "contents": [["invalid_audio", "Audio is 601.0s (max 600s)."]],
+                        }
+                    }
+                },
+            }
+            with self.assertRaisesMessage(InvalidAudioError, "Audio is 601.0s (max 600s)."):
+                asyncio.run(_request_transcription("https://example.test/audio"))
+            endpoint.request.return_value = {
+                "status": 200,
                 "response": {"result": {"ok": {"invalid_audio": "Audio exceeds the limit."}}},
             }
             with self.assertRaisesMessage(InvalidAudioError, "Audio exceeds the limit."):

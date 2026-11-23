@@ -29,6 +29,23 @@ def check_vast_configuration():
         raise RuntimeError("Install deploy/vast/requirements.txt for Vast inference") from None
 
 
+def _extract_invalid_audio(value):
+    if not isinstance(value, dict):
+        return None
+    if isinstance(value.get("invalid_audio"), str):
+        return value["invalid_audio"]
+    if value.get("type") == "dict" and isinstance(value.get("contents"), list):
+        for item in value["contents"]:
+            if (
+                isinstance(item, (list, tuple))
+                and len(item) == 2
+                and item[0] == "invalid_audio"
+                and isinstance(item[1], str)
+            ):
+                return item[1]
+    return None
+
+
 async def _request_transcription(audio_url):
     from vastai import Serverless
 
@@ -52,8 +69,9 @@ async def _request_transcription(audio_url):
     result = response.get("response") or {}
     outcome = result.get("result") if isinstance(result, dict) else None
     value = outcome.get("ok") if isinstance(outcome, dict) else None
-    if status == 200 and isinstance(value, dict) and "invalid_audio" in value:
-        raise InvalidAudioError(value["invalid_audio"])
+    invalid_audio = _extract_invalid_audio(value) if status == 200 else None
+    if invalid_audio is not None:
+        raise InvalidAudioError(invalid_audio)
     if status != 200 or not isinstance(value, str):
         raise RetryableTranscriptionError("Vast could not complete the transcription.")
     return value
