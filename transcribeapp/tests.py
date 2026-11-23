@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 import shutil
@@ -30,8 +31,12 @@ from transcribeapp.queue import (
     heartbeat,
     mark_completed,
     reap_stale_tasks,
+    retry_task,
 )
 from transcribeapp.ratelimit import check_rate_limit
+from transcribeapp.tasks import InvalidAudioError
+from transcribeapp.vast_client import RetryableTranscriptionError, _request_transcription
+
 
 
 @override_settings(VAST_ENDPOINT_NAME="test-endpoint", VAST_API_KEY="test-key")
@@ -137,6 +142,35 @@ class WorkerDispatchTests(TestCase):
             with self.assertRaisesMessage(RuntimeError, "Audio download returned HTTP 403"):
                 command._download_audio(audio_url, directory)
         self.assertNotIn("signature", command.stdout.getvalue())
+
+    def test_vast_input_error_is_permanent_and_unavailability_is_retryable(self):
+        endpoint = SimpleNamespace(request=AsyncMock())
+        serverless = MagicMock()
+        serverless.__aenter__.return_value.get_endpoint = AsyncMock(return_value=endpoint)
+        with patch.dict(sys.modules, {"vastai": SimpleNamespace(Serverless=lambda **_: serverless)}):
+            endpoint.request.return_value = {
+                "status": 200,
+                "response": {"result": {"ok": {"invalid_audio": "Audio exceeds the limit."}}},
+            }
+            with self.assertRaisesMessage(InvalidAudioError, "Audio exceeds the limit."):
+                asyncio.run(_request_transcription("https://example.test/audio"))
+            endpoint.request.return_value = {"status": 503, "response": None}
+            with self.assertRaises(RetryableTranscriptionError):
+                asyncio.run(_request_transcription("https://example.test/audio"))
+
+    @patch("transcribeapp.management.commands.runworker.requests.post", side_effect=requests.Timeout)
+    def test_callback_timeout_checks_if_midi_was_already_saved(self, post):
+        job = AudioMIDI.objects.create(
+            audio_filename="test.wav", midi_file="midi/result.midi",
+            status=AudioMIDI.Status.COMPLETED,
+        )
+        command = WorkerCommand(stdout=StringIO())
+        command.web_url = "http://web:8008"
+        command.worker_id = "dispatcher"
+        with tempfile.NamedTemporaryFile() as midi:
+            command._upload_result(str(job.pk), "completed", midi.name)
+
+        post.assert_called_once()
 
 
 class MediaRootTests(TestCase):
@@ -507,27 +541,62 @@ class QueueTests(TestCase):
             0,
         )
 
-    def test_reaper_requeues_task_without_heartbeat(self):
+    def test_reaper_schedules_a_lost_worker_job_for_another_dispatcher(self):
         task_id = self._task_id()
         enqueue_task({"audio_midi_id": task_id, "type": "transcribe"})
         claim_task("dead-worker", timeout=1)
-        self.redis.zadd(
-            settings.TASK_PROCESSING_TIME_KEY,
-            {task_id: time.time() - 1000},
-        )
+        now = time.time()
+        self.redis.zadd(settings.TASK_PROCESSING_TIME_KEY, {task_id: now - 1000})
 
-        with self.settings(TASK_PROCESSING_TIMEOUT=1, TASK_MAX_RETRIES=3):
-            reaped = reap_stale_tasks()
+        with self.settings(TASK_PROCESSING_TIMEOUT=1):
+            self.assertEqual(reap_stale_tasks(), 1)
+            self.assertEqual(reap_stale_tasks(), 0)
 
-        self.assertEqual(reaped, 1)
         state = get_task_state(task_id)
-        self.assertEqual(state["status"], "pending")
+        self.assertEqual(state["status"], "retrying")
         self.assertEqual(state["retries"], 1)
-        queued = [
-            value.decode() if isinstance(value, bytes) else value
-            for value in self.redis.lrange(settings.TASK_QUEUE_KEY, 0, -1)
-        ]
-        self.assertIn(task_id, queued)
+        self.assertGreater(state["retry_at"], now)
+        self.assertIsNone(claim_task("replacement", timeout=0.1))
+
+        self.redis.zadd(settings.TASK_RETRY_KEY, {task_id: now - 1})
+        claimed_id, state = claim_task("replacement", timeout=1)
+        self.assertEqual(claimed_id, task_id)
+        self.assertEqual(state["worker_id"], "replacement")
+        self.assertEqual(state["retries"], 1)
+        self.assertFalse(retry_task(task_id, "dead-worker", "late failure"))
+
+    @override_settings(TASK_MAX_RETRIES=2)
+    def test_transient_errors_exhaust_three_attempts(self):
+        task_id = self._task_id()
+        enqueue_task({"audio_midi_id": task_id, "type": "transcribe"})
+        for retries in range(3):
+            claimed_id, state = claim_task("dispatcher", timeout=1)
+            self.assertEqual(claimed_id, task_id)
+            self.assertEqual(state["retries"], retries)
+            self.assertTrue(retry_task(task_id, "dispatcher", "Vast temporarily unavailable"))
+            if retries < 2:
+                self.assertEqual(get_task_state(task_id)["status"], "retrying")
+                self.redis.zadd(settings.TASK_RETRY_KEY, {task_id: time.time() - 1})
+
+        state = get_task_state(task_id)
+        self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["error"], "Vast temporarily unavailable")
+        self.assertIsNone(self.redis.zscore(settings.TASK_RETRY_KEY, task_id))
+
+    def test_status_exposes_scheduled_retry_for_the_same_job(self):
+        job = AudioMIDI.objects.create(
+            audio_filename="audio.wav", status=AudioMIDI.Status.PROCESSING
+        )
+        job_id = str(job.pk)
+        enqueue_task({"audio_midi_id": job_id, "type": "transcribe"})
+        claim_task("dispatcher", timeout=1)
+        retry_task(job_id, "dispatcher", "Temporary connection failure")
+
+        response = self.client.get(reverse("audio_status", args=[job.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["audio_midi_id"], job.pk)
+        self.assertEqual(response.json()["status"], "retrying")
+        self.assertEqual(response.json()["message"], "Retrying automatically")
 
     def test_reaper_leaves_live_worker_task_alone(self):
         task_id = self._task_id()

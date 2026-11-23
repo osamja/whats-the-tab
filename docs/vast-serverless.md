@@ -89,6 +89,30 @@ Keep the signed URL lifetime longer than the maximum dispatch wait. The
 dispatcher sends start and finish progress for Vast jobs. Local inference
 continues to report per-chunk progress.
 
+### Transcription retries
+
+The Linode queue owns the retry budget. A transient Vast failure or a lost
+dispatcher lease can schedule the same job ID twice, roughly 30 seconds
+and two minutes later with jitter. Each attempt signs a new audio URL and
+calls the same endpoint, allowing Vast to route it again. The status API
+reports `retrying`, and the frontend keeps polling the original job.
+
+An unreadable file or an audio limit violation ends the job immediately.
+Deploy the matching worker image and Vast module to return these input
+failures explicitly. If a result callback times out, the dispatcher checks
+whether Django saved the MIDI before resending the file. Django keeps the
+first successfully saved MIDI.
+
+In staging, a connection loss injected after a real Vast request started
+put the job into `retrying`. A replacement dispatcher claimed the same ID
+after the delay and produced a private, downloadable four-note MIDI.
+
+In a separate drill, we destroyed an isolated Vast GPU while it was
+transcribing a 70-second piano fixture. The SDK routed the request to the
+other worker within the same application attempt. The original job
+completed with a 338-note MIDI. The two drills verified recovery both
+inside the SDK and after a failure reaches the Linode queue.
+
 ### RTX 4090 and RTX 3060 staging comparison
 
 Both endpoints ran the same worker image digest and processed the same inputs

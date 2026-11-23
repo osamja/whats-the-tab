@@ -1,4 +1,5 @@
 import json
+import random
 import time
 import uuid
 import redis
@@ -34,119 +35,129 @@ def enqueue_task(task_data: dict) -> str:
     return task_id
 
 
+_CLAIM_TASK = """
+local id = redis.call('RPOP', KEYS[1])
+if not id then return false end
+local key = ARGV[1] .. id
+if redis.call('HGET', key, 'status') ~= 'pending' then return false end
+redis.call('LPUSH', KEYS[2], id)
+redis.call('ZADD', KEYS[3], ARGV[2], id)
+redis.call('HSET', key, 'status', 'processing', 'started_at', ARGV[2],
+           'worker_id', ARGV[3])
+redis.call('PUBLISH', KEYS[4], id)
+return id
+"""
+
+
 def claim_task(worker_id=None, timeout=None):
-    """Claim the next task, blocking up to ``timeout`` seconds.
-
-    Returns a ``(task_id, state)`` tuple, or ``None`` when the queue is empty.
-    The claimed task ID is returned explicitly so callers never have to infer
-    it from a pub/sub notification or a different queue entry.
-    """
+    """Claim a pending task and record its lease in one Redis operation."""
     r = get_redis()
-
-    if timeout is None:
-        timeout = settings.TASK_POLL_TIMEOUT
-
-    task_id = r.brpoplpush(
-        settings.TASK_QUEUE_KEY,
-        settings.TASK_PROCESSING_KEY,
-        timeout=timeout,
-    )
-
-    if not task_id:
-        return None
-
-    tid = task_id.decode() if isinstance(task_id, bytes) else task_id
-    task_key = f"{settings.TASK_HASH_PREFIX}{tid}"
-
-    # A task hash may have expired or been deleted while it sat in the queue.
-    # Clean up the processing list rather than inventing a state with no payload.
-    if not r.exists(task_key):
-        r.lrem(settings.TASK_PROCESSING_KEY, 0, tid)
-        r.zrem(settings.TASK_PROCESSING_TIME_KEY, tid)
-        return None
-
-    now = time.time()
+    timeout = settings.TASK_POLL_TIMEOUT if timeout is None else timeout
+    deadline = time.monotonic() + timeout
     owner = worker_id or uuid.uuid4().hex[:8]
+    while True:
+        promote_due_retries(r)
+        task_id = r.eval(
+            _CLAIM_TASK, 4, settings.TASK_QUEUE_KEY, settings.TASK_PROCESSING_KEY,
+            settings.TASK_PROCESSING_TIME_KEY, settings.TASK_CLAIMED_CHANNEL,
+            settings.TASK_HASH_PREFIX, time.time(), owner,
+        )
+        if task_id:
+            tid = task_id.decode()
+            return tid, get_task_state(tid)
+        remaining = deadline - time.monotonic()
+        if timeout and remaining <= 0:
+            return None
+        time.sleep(min(0.5, remaining) if timeout else 0.5)
 
-    pipeline = r.pipeline()
-    pipeline.zadd(settings.TASK_PROCESSING_TIME_KEY, {tid: now})
-    pipeline.hset(
-        task_key,
-        mapping={
-            "status": "processing",
-            "started_at": now,
-            "worker_id": owner,
-        },
-    )
-    pipeline.publish(settings.TASK_CLAIMED_CHANNEL, tid)
-    pipeline.execute()
 
-    return tid, get_task_state(tid)
+def retry_task(task_id, worker_id, error, *, stale_before=None):
+    """Release the current claim and schedule an attempt or record failure."""
+    r = get_redis()
+    key = f"{settings.TASK_HASH_PREFIX}{task_id}"
+    owner = worker_id.encode() if isinstance(worker_id, str) else worker_id
+    with r.pipeline() as pipe:
+        while True:
+            try:
+                pipe.watch(key)
+                status, current_owner, count = pipe.hmget(key, "status", "worker_id", "retries")
+                if status != b"processing" or current_owner != owner:
+                    return False
+                now = time.time()
+                if stale_before is not None:
+                    pipe.watch(settings.TASK_PROCESSING_TIME_KEY)
+                    lease = pipe.zscore(settings.TASK_PROCESSING_TIME_KEY, task_id)
+                    if lease is None or lease > stale_before:
+                        return False
+                    if worker_id:
+                        heartbeat_key = f"worker:{worker_id}"
+                        pipe.watch(heartbeat_key)
+                        if pipe.exists(heartbeat_key):
+                            pipe.multi()
+                            pipe.zadd(settings.TASK_PROCESSING_TIME_KEY, {task_id: now})
+                            pipe.execute()
+                            return False
+
+                retries = int(count or 0)
+                pipe.multi()
+                _release_claim(pipe, task_id)
+                if retries < settings.TASK_MAX_RETRIES:
+                    delay = (30 if retries == 0 else 120) * random.uniform(0.85, 1.15)
+                    retry_at = now + delay
+                    pipe.hset(key, mapping={
+                        "status": "retrying", "retries": retries + 1, "retry_at": retry_at,
+                    })
+                    pipe.hdel(key, "started_at", "worker_id", "error")
+                    pipe.zadd(settings.TASK_RETRY_KEY, {task_id: retry_at})
+                else:
+                    _record_failure(pipe, key, task_id, error)
+                pipe.execute()
+                return True
+            except redis.WatchError:
+                continue
+
+
+def promote_due_retries(r):
+    now = time.time()
+    for task_id in r.zrangebyscore(settings.TASK_RETRY_KEY, "-inf", now, start=0, num=100):
+        key = f"{settings.TASK_HASH_PREFIX}{task_id.decode()}"
+        with r.pipeline() as pipe:
+            try:
+                pipe.watch(key, settings.TASK_RETRY_KEY)
+                waiting = pipe.hget(key, "status") == b"retrying"
+                retry_at = pipe.zscore(settings.TASK_RETRY_KEY, task_id)
+                if retry_at is None or retry_at > now:
+                    continue
+                pipe.multi()
+                pipe.zrem(settings.TASK_RETRY_KEY, task_id)
+                if not waiting:
+                    pipe.execute()
+                    continue
+                pipe.hset(key, "status", "pending")
+                pipe.hdel(key, "retry_at")
+                pipe.rpush(settings.TASK_QUEUE_KEY, task_id)
+                pipe.publish(settings.TASK_NEW_CHANNEL, task_id)
+                pipe.execute()
+            except redis.WatchError:
+                continue
 
 
 def reap_stale_tasks():
-    """Requeue or fail tasks whose worker has disappeared.
-
-    A task is considered stale when its processing deadline has passed *and*
-    its worker heartbeat is gone. Live workers keep their heartbeat key alive
-    while a long transcription is running, so long jobs are not reaped.
-    """
+    """Recover claims past their lease when the dispatcher heartbeat is gone."""
     r = get_redis()
     cutoff = time.time() - settings.TASK_PROCESSING_TIMEOUT
     stale_ids = r.zrangebyscore(
-        settings.TASK_PROCESSING_TIME_KEY,
-        "-inf",
-        cutoff,
-        start=0,
-        num=100,
+        settings.TASK_PROCESSING_TIME_KEY, "-inf", cutoff, start=0, num=100
     )
-
     reaped = 0
     for raw_id in stale_ids:
-        tid = raw_id.decode() if isinstance(raw_id, bytes) else raw_id
-        task_key = f"{settings.TASK_HASH_PREFIX}{tid}"
-
-        # Only one reaper may own this task. If another one won the race, or
-        # the worker completed and removed the zset entry, skip it.
-        if r.zrem(settings.TASK_PROCESSING_TIME_KEY, tid) != 1:
-            continue
-
-        r.lrem(settings.TASK_PROCESSING_KEY, 0, tid)
-        state = get_task_state(tid)
-
-        if not state or state.get("status") != "processing":
-            continue
-
-        worker_id = state.get("worker_id")
-        if worker_id and r.exists(f"worker:{worker_id}"):
-            # The worker is alive and still heartbeating. Extend its lease.
-            r.zadd(settings.TASK_PROCESSING_TIME_KEY, {tid: time.time()})
-            continue
-
-        try:
-            retries = int(state.get("retries", 0) or 0)
-        except (TypeError, ValueError):
-            retries = 0
-
-        if retries < settings.TASK_MAX_RETRIES:
-            r.hset(
-                task_key,
-                mapping={
-                    "status": "pending",
-                    "retries": retries + 1,
-                },
-            )
-            r.hdel(task_key, "started_at", "worker_id", "error")
-            r.rpush(settings.TASK_QUEUE_KEY, tid)
-            r.publish(settings.TASK_NEW_CHANNEL, tid)
-        else:
-            mark_failed(
-                tid,
-                f"task timed out after {retries} retries",
-            )
-
-        reaped += 1
-
+        task_id = raw_id.decode()
+        key = f"{settings.TASK_HASH_PREFIX}{task_id}"
+        owner = r.hget(key, "worker_id")
+        reaped += retry_task(
+            task_id, owner.decode() if owner else None,
+            "Transcription worker stopped responding.", stale_before=cutoff,
+        )
     return reaped
 
 
@@ -161,7 +172,7 @@ def get_task_state(task_id):
         val = v.decode() if isinstance(v, bytes) else v
         if key == "payload":
             val = json.loads(val)
-        elif key in ("created_at", "started_at", "completed_at", "retries"):
+        elif key in ("created_at", "started_at", "completed_at", "retries", "retry_at"):
             try:
                 val = float(val)
             except (ValueError, TypeError):
@@ -170,45 +181,44 @@ def get_task_state(task_id):
     return decoded
 
 
+def _release_claim(pipe, task_id):
+    pipe.lrem(settings.TASK_PROCESSING_KEY, 0, task_id)
+    pipe.zrem(settings.TASK_PROCESSING_TIME_KEY, task_id)
+    pipe.zrem(settings.TASK_RETRY_KEY, task_id)
+
+
+def _record_failure(pipe, key, task_id, error):
+    pipe.hset(key, mapping={
+        "status": "failed", "completed_at": time.time(), "error": str(error),
+    })
+    pipe.rpush(settings.TASK_RESULTS_KEY, task_id)
+    pipe.rpush(settings.TASK_FAILED_KEY, task_id)
+    pipe.ltrim(settings.TASK_FAILED_KEY, -settings.TASK_FAILED_MAX, -1)
+    pipe.publish(settings.TASK_FAILED_CHANNEL, task_id)
+    pipe.expire(key, settings.TASK_FAILED_TTL)
+
+
 def mark_completed(task_id, result_status="completed"):
     r = get_redis()
-    task_key = f"{settings.TASK_HASH_PREFIX}{task_id}"
-
-    r.hset(
-        task_key,
-        mapping={
-            "status": "completed",
-            "result_status": result_status,
+    key = f"{settings.TASK_HASH_PREFIX}{task_id}"
+    with r.pipeline() as pipe:
+        _release_claim(pipe, task_id)
+        pipe.hset(key, mapping={
+            "status": "completed", "result_status": result_status,
             "completed_at": time.time(),
-        },
-    )
-
-    r.lrem(settings.TASK_PROCESSING_KEY, 0, task_id)
-    r.zrem(settings.TASK_PROCESSING_TIME_KEY, task_id)
-    r.rpush(settings.TASK_RESULTS_KEY, task_id)
-    r.publish(settings.TASK_COMPLETED_CHANNEL, task_id)
-    r.expire(task_key, settings.TASK_RESULT_TTL)
+        })
+        pipe.rpush(settings.TASK_RESULTS_KEY, task_id)
+        pipe.publish(settings.TASK_COMPLETED_CHANNEL, task_id)
+        pipe.expire(key, settings.TASK_RESULT_TTL)
+        pipe.execute()
 
 
 def mark_failed(task_id, error):
     r = get_redis()
-    task_key = f"{settings.TASK_HASH_PREFIX}{task_id}"
-
-    r.hset(
-        task_key,
-        mapping={
-            "status": "failed",
-            "completed_at": time.time(),
-            "error": str(error),
-        },
-    )
-
-    r.lrem(settings.TASK_PROCESSING_KEY, 0, task_id)
-    r.zrem(settings.TASK_PROCESSING_TIME_KEY, task_id)
-    r.rpush(settings.TASK_FAILED_KEY, task_id)
-    r.ltrim(settings.TASK_FAILED_KEY, -settings.TASK_FAILED_MAX, -1)
-    r.publish(settings.TASK_FAILED_CHANNEL, task_id)
-    r.expire(task_key, settings.TASK_FAILED_TTL)
+    with r.pipeline() as pipe:
+        _release_claim(pipe, task_id)
+        _record_failure(pipe, f"{settings.TASK_HASH_PREFIX}{task_id}", task_id, error)
+        pipe.execute()
 
 
 def publish_progress(task_id, current, total):

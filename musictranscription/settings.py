@@ -141,6 +141,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 TASK_QUEUE_KEY = "task:queue"
 TASK_PROCESSING_KEY = "task:processing"
 TASK_PROCESSING_TIME_KEY = "task:processing:time"
+TASK_RETRY_KEY = "task:retry"
 TASK_FAILED_KEY = "task:failed"
 TASK_RESULTS_KEY = "task:results"
 TASK_HASH_PREFIX = "task:"
@@ -152,7 +153,7 @@ TASK_COMPLETED_CHANNEL = "task:completed"
 TASK_FAILED_CHANNEL = "task:failed"
 
 TASK_PROCESSING_TIMEOUT = int(os.getenv("TASK_PROCESSING_TIMEOUT", "300"))
-TASK_MAX_RETRIES = int(os.getenv("TASK_MAX_RETRIES", "3"))
+TASK_MAX_RETRIES = int(os.getenv("TASK_MAX_RETRIES", "2"))
 TASK_POLL_TIMEOUT = int(os.getenv("TASK_POLL_TIMEOUT", "5"))
 TASK_REAP_INTERVAL = int(os.getenv("TASK_REAP_INTERVAL", "30"))
 TASK_RESULT_TTL = int(os.getenv("TASK_RESULT_TTL", "604800"))

@@ -9,6 +9,12 @@ from urllib.parse import urlsplit
 
 from django.conf import settings
 
+from .tasks import InvalidAudioError
+
+
+class RetryableTranscriptionError(RuntimeError):
+    """The same job may succeed on a later attempt."""
+
 
 def check_vast_configuration():
     if not settings.VAST_API_KEY:
@@ -36,17 +42,21 @@ async def _request_transcription(audio_url):
                     retry=False,
                 )
     except TimeoutError:
-        raise RuntimeError("Vast transcription timed out") from None
+        raise RetryableTranscriptionError("Vast transcription timed out.") from None
     except Exception:
-        raise RuntimeError("Vast request failed; check the endpoint and worker logs") from None
+        raise RetryableTranscriptionError("Could not reach Vast for transcription.") from None
 
-    try:
-        encoded_midi = response["response"]["result"]["ok"]
-        if response["status"] != 200 or not isinstance(encoded_midi, str):
-            raise ValueError
-    except (KeyError, TypeError, ValueError):
-        raise RuntimeError("Vast transcription failed; check the worker logs") from None
-    return encoded_midi
+    status = response.get("status")
+    if status in (400, 401, 403, 413, 422):
+        raise RuntimeError("Vast rejected the transcription request.")
+    result = response.get("response") or {}
+    outcome = result.get("result") if isinstance(result, dict) else None
+    value = outcome.get("ok") if isinstance(outcome, dict) else None
+    if status == 200 and isinstance(value, dict) and "invalid_audio" in value:
+        raise InvalidAudioError(value["invalid_audio"])
+    if status != 200 or not isinstance(value, str):
+        raise RetryableTranscriptionError("Vast could not complete the transcription.")
+    return value
 
 
 def transcribe_via_vast(task_id, output_dir):
@@ -70,7 +80,7 @@ def transcribe_via_vast(task_id, output_dir):
         if not parsed_midi.tracks:
             raise ValueError
     except (binascii.Error, EOFError, OSError, ValueError, KeyError, IndexError):
-        raise RuntimeError("Vast returned invalid MIDI") from None
+        raise RetryableTranscriptionError("Vast returned invalid MIDI") from None
 
     output_path = Path(output_dir) / "transcription.midi"
     output_path.write_bytes(midi)

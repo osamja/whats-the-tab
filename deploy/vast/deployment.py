@@ -91,7 +91,9 @@ def _download_audio(url, path):
                 for chunk in response.iter_content(chunk_size=65536):
                     size += len(chunk)
                     if size > MAX_DOWNLOAD_BYTES:
-                        raise ValueError("Audio exceeds the Vast worker download limit")
+                        from transcribeapp.tasks import InvalidAudioError
+
+                        raise InvalidAudioError("Audio exceeds the Vast worker download limit.")
                     output.write(chunk)
     except requests.RequestException:
         raise RuntimeError("Audio download failed") from None
@@ -129,10 +131,14 @@ def _transcribe(audio_url):
 
 
 @app.remote(benchmark_dataset=[{"audio_url": None}], benchmark_runs=3)
-async def transcribe(audio_url: str | None) -> str:
+async def transcribe(audio_url: str | None) -> str | dict:
+    from transcribeapp.tasks import InvalidAudioError
+
     async with app.get_context(MT3Context):
         try:
             return await asyncio.to_thread(_transcribe, audio_url)
+        except InvalidAudioError as exc:
+            return {"invalid_audio": str(exc)}
         except Exception as exc:
             # A failed request can contain a presigned URL in its exception.
             logger.error("MT3 request failed (%s)", type(exc).__name__)

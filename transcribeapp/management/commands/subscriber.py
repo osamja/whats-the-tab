@@ -13,19 +13,18 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         r = get_redis()
 
-        self._drain_results_backlog(r)
-
         self._subscribe_live(r)
 
     def _drain_results_backlog(self, r):
         self.stdout.write("Draining results backlog...")
         count = 0
         while True:
-            task_id = r.rpop(settings.TASK_RESULTS_KEY)
+            task_id = r.lindex(settings.TASK_RESULTS_KEY, 0)
             if not task_id:
                 break
             tid = task_id.decode() if isinstance(task_id, bytes) else task_id
             self._update_db_from_state(tid)
+            r.lrem(settings.TASK_RESULTS_KEY, 1, task_id)
             count += 1
         self.stdout.write(f"Caught up on {count} results")
 
@@ -37,6 +36,7 @@ class Command(BaseCommand):
             settings.TASK_FAILED_CHANNEL,
         )
         pubsub.psubscribe(f"{settings.TASK_PROGRESS_PREFIX}*")
+        self._drain_results_backlog(r)
 
         self.stdout.write(
             self.style.SUCCESS(
@@ -75,6 +75,8 @@ class Command(BaseCommand):
                 settings.TASK_FAILED_CHANNEL,
             ):
                 self._update_db_from_state(data)
+                if channel in (settings.TASK_COMPLETED_CHANNEL, settings.TASK_FAILED_CHANNEL):
+                    r.lrem(settings.TASK_RESULTS_KEY, 0, data)
 
     def _update_db_from_state(self, task_id):
         state = get_task_state(task_id)
@@ -82,33 +84,24 @@ class Command(BaseCommand):
             self.stderr.write(f"No state found for task {task_id}")
             return
 
-        try:
-            audio_midi = AudioMIDI.objects.get(id=task_id)
-        except AudioMIDI.DoesNotExist:
-            self.stderr.write(f"AudioMIDI {task_id} not found in DB")
-            return
-
-        new_status = state.get("status")
-        result_status = state.get("result_status")
-        if new_status == "claimed" or new_status == "processing":
-            audio_midi.status = "processing"
-        elif new_status == "completed":
-            audio_midi.status = result_status or "completed"
-        elif new_status == "failed":
-            audio_midi.status = "failed"
-            audio_midi.error_message = state.get("error", "Unknown error")
+        status = state.get("status")
+        error = ""
+        if status in ("claimed", "processing"):
+            status = AudioMIDI.Status.PROCESSING
+        elif status == "completed":
+            status = state.get("result_status") or AudioMIDI.Status.COMPLETED
+        elif status == "failed":
+            error = state.get("error", "Unknown error")
         else:
-            self.stderr.write(f"Unknown status for task {task_id}: {new_status}")
             return
 
-        audio_midi.save(update_fields=["status", "error_message"])
-        self.stdout.write(f"DB updated: task={task_id} status={audio_midi.status}")
+        # A completed callback takes precedence over a late queue event.
+        AudioMIDI.objects.filter(pk=task_id).exclude(
+            status=AudioMIDI.Status.COMPLETED
+        ).update(status=status, error_message=error)
+        self.stdout.write(f"DB updated: task={task_id} status={status}")
 
     def _update_progress(self, task_id, progress):
-        try:
-            audio_midi = AudioMIDI.objects.get(id=task_id)
-            audio_midi.current_chunk = progress.get("current", 0)
-            audio_midi.total_chunks = progress.get("total", 0)
-            audio_midi.save(update_fields=["current_chunk", "total_chunks"])
-        except AudioMIDI.DoesNotExist:
-            pass
+        AudioMIDI.objects.filter(pk=task_id).exclude(
+            status=AudioMIDI.Status.COMPLETED
+        ).update(current_chunk=progress.get("current", 0), total_chunks=progress.get("total", 0))

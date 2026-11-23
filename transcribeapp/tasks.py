@@ -3,6 +3,10 @@ import os
 import threading
 import uuid
 
+class InvalidAudioError(ValueError):
+    """The input cannot be transcribed as supplied."""
+
+
 CHECKPOINT_PATH = "pytorch_mt3/mt3_pytorch_checkpoint.pt"
 
 _inference_model = None
@@ -88,18 +92,21 @@ def transcribe_audio(
     if info and info.sample_rate and info.num_frames:
         duration_seconds = info.num_frames / info.sample_rate
         if duration_seconds > max_duration:
-            raise ValueError(
+            raise InvalidAudioError(
                 f"Audio is {duration_seconds:.1f}s long; maximum is "
                 f"{max_duration}s"
             )
 
-    audio = (
-        load_audio(audio_filepath, sample_rate=SAMPLE_RATE, mono=True).cpu().numpy()
-    )
+    try:
+        audio = load_audio(audio_filepath, sample_rate=SAMPLE_RATE, mono=True).cpu().numpy()
+    except (RuntimeError, ValueError) as exc:
+        raise InvalidAudioError("The uploaded audio could not be decoded.") from exc
+    if not len(audio):
+        raise InvalidAudioError("The uploaded audio is empty.")
 
     duration_seconds = len(audio) / SAMPLE_RATE
     if duration_seconds > max_duration:
-        raise ValueError(
+        raise InvalidAudioError(
             f"Audio is {duration_seconds:.1f}s long; maximum is {max_duration}s"
         )
 

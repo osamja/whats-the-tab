@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
+from transcribeapp.models import AudioMIDI
 from transcribeapp.queue import (
     claim_task,
     heartbeat,
@@ -17,9 +18,12 @@ from transcribeapp.queue import (
     mark_failed,
     publish_progress,
     reap_stale_tasks,
+    retry_task,
 )
-from transcribeapp.tasks import download_youtube_audio, transcribe_audio
-from transcribeapp.vast_client import check_vast_configuration, transcribe_via_vast
+from transcribeapp.tasks import InvalidAudioError, download_youtube_audio, transcribe_audio
+from transcribeapp.vast_client import (
+    RetryableTranscriptionError, check_vast_configuration, transcribe_via_vast,
+)
 
 
 class Command(BaseCommand):
@@ -85,10 +89,26 @@ class Command(BaseCommand):
             )
 
             try:
-                self._process_task(task_id, state)
-            except Exception as e:
-                self.stderr.write(f"[{self.worker_id}] Task {task_id} failed: {e}")
-                mark_failed(task_id, str(e))
+                if task_type == "transcribe" and self._result_is_saved(task_id):
+                    mark_completed(task_id)
+                else:
+                    self._process_task(task_id, state)
+            except RetryableTranscriptionError as exc:
+                if task_type == "transcribe":
+                    retry_task(task_id, self.worker_id, str(exc))
+                else:
+                    mark_failed(task_id, str(exc))
+            except InvalidAudioError as exc:
+                mark_failed(task_id, str(exc))
+            except Exception as exc:
+                self.stderr.write(
+                    f"[{self.worker_id}] Task {task_id} failed ({type(exc).__name__})"
+                )
+                message = (
+                    "Transcription could not be completed."
+                    if task_type == "transcribe" else str(exc)
+                )
+                mark_failed(task_id, message)
 
             self.current_task_id = None
 
@@ -108,9 +128,8 @@ class Command(BaseCommand):
             self.stderr.write(
                 f"[{self.worker_id}] Flushing current task {self.current_task_id} to failed"
             )
-            mark_failed(
-                self.current_task_id,
-                "worker shutdown mid-processing",
+            retry_task(
+                self.current_task_id, self.worker_id, "Transcription worker shut down."
             )
 
     def _start_heartbeat(self):
@@ -191,16 +210,28 @@ class Command(BaseCommand):
 
         self.stdout.write(f"[{self.worker_id}] Uploading result to {url} ({status})")
 
-        with open(file_path, "rb") as f:
-            resp = requests.post(
-                url,
-                data=data,
-                files={"result_file": f},
-                headers=headers,
-                timeout=60,
-            )
-            resp.raise_for_status()
+        delays = (0, 1, 3) if status == "completed" else (0,)
+        for delay in delays:
+            if delay:
+                time.sleep(delay)
+            with open(file_path, "rb") as result_file:
+                try:
+                    response = requests.post(
+                        url, data=data, files={"result_file": result_file},
+                        headers=headers, timeout=15,
+                    )
+                except (requests.ConnectionError, requests.Timeout):
+                    response = None
+            if response is not None:
+                if response.ok:
+                    return
+                if response.status_code < 500 and response.status_code not in (408, 429):
+                    response.raise_for_status()
+            if status == "completed" and self._result_is_saved(task_id):
+                return
+        raise RetryableTranscriptionError("Could not deliver the transcription result.")
 
-        self.stdout.write(
-            f"[{self.worker_id}] Result uploaded: task={task_id} HTTP {resp.status_code}"
-        )
+    def _result_is_saved(self, task_id):
+        return AudioMIDI.objects.filter(pk=task_id, status=AudioMIDI.Status.COMPLETED).exclude(
+            midi_file__isnull=True
+        ).exclude(midi_file="").exists()

@@ -6,11 +6,13 @@ import tempfile
 import uuid
 
 from django.conf import settings
+from django.db import transaction
+from redis.exceptions import RedisError
 from django.http import FileResponse, Http404, HttpResponseRedirect, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from .models import AudioMIDI
-from .queue import enqueue_task, get_redis
+from .queue import enqueue_task, get_redis, get_task_state
 from .ratelimit import check_rate_limit
 from .tasks import get_audio_filename
 
@@ -255,47 +257,53 @@ def transcribe(request):
 
     try:
         audio_midi_id = request.POST["audio_midi_id"]
-        audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
+        with transaction.atomic():
+            audio_midi = AudioMIDI.objects.select_for_update().get(id=audio_midi_id)
 
-        if not audio_midi.audio_file:
+            if not audio_midi.audio_file:
+                return JsonResponse(
+                    {
+                        "error": (
+                            "Audio is not ready yet. Wait for the YouTube download "
+                            "to finish before requesting transcription."
+                        )
+                    },
+                    status=409,
+                )
+
+            if audio_midi.status in (
+                AudioMIDI.Status.QUEUED, AudioMIDI.Status.PROCESSING, AudioMIDI.Status.COMPLETED,
+            ):
+                return JsonResponse({"audio_midi_id": audio_midi.id, "status": audio_midi.status})
+
+            audio_midi.status = AudioMIDI.Status.QUEUED
+            audio_midi.error_message = ""
+            audio_midi.save(update_fields=["status", "error_message"])
+
+            audio_url = audio_midi.audio_file.url
+            if not audio_url.startswith(("http://", "https://")):
+                audio_url = f"{settings.WEB_URL.rstrip('/')}{audio_url}"
+
+            try:
+                enqueue_task(
+                    {
+                        "type": "transcribe",
+                        "audio_midi_id": str(audio_midi_id),
+                        "audio_url": audio_url,
+                    }
+                )
+            except Exception:
+                audio_midi.status = AudioMIDI.Status.FAILED
+                audio_midi.error_message = "Could not queue transcription."
+                audio_midi.save(update_fields=["status", "error_message"])
+                return JsonResponse({"error": audio_midi.error_message}, status=503)
+
             return JsonResponse(
                 {
-                    "error": (
-                        "Audio is not ready yet. Wait for the YouTube download "
-                        "to finish before requesting transcription."
-                    )
-                },
-                status=409,
-            )
-
-        audio_midi.status = AudioMIDI.Status.QUEUED
-        audio_midi.error_message = ""
-        audio_midi.save(update_fields=["status", "error_message"])
-
-        audio_url = audio_midi.audio_file.url
-        if not audio_url.startswith(("http://", "https://")):
-            audio_url = f"{settings.WEB_URL.rstrip('/')}{audio_url}"
-
-        try:
-            enqueue_task(
-                {
-                    "type": "transcribe",
-                    "audio_midi_id": str(audio_midi_id),
-                    "audio_url": audio_url,
+                    "message": "Transcription queued. Check status endpoint for updates.",
+                    "audio_midi_id": audio_midi_id,
                 }
             )
-        except Exception as e:
-            audio_midi.status = AudioMIDI.Status.FAILED
-            audio_midi.error_message = f"Failed to enqueue task: {e}"
-            audio_midi.save(update_fields=["status", "error_message"])
-            raise
-
-        return JsonResponse(
-            {
-                "message": "Transcription queued. Check status endpoint for updates.",
-                "audio_midi_id": audio_midi_id,
-            }
-        )
 
     except KeyError as e:
         return JsonResponse({"error": f"Missing key in request data: {str(e)}"}, status=400)
@@ -342,21 +350,25 @@ def result(request):
         return JsonResponse({"error": "Invalid task_type"}, status=400)
 
     try:
-        audio_midi = AudioMIDI.objects.get(id=audio_midi_id)
+        with transaction.atomic():
+            audio_midi = AudioMIDI.objects.select_for_update().get(id=audio_midi_id)
+            return _save_result(audio_midi, audio_midi_id, task_type, result_file)
     except AudioMIDI.DoesNotExist:
         return JsonResponse({"error": "AudioMIDI not found"}, status=404)
 
-    if audio_midi.status == task_type:
-        if task_type == AudioMIDI.Status.COMPLETED and audio_midi.midi_file:
-            return JsonResponse({"message": "Already processed", "audio_midi_id": audio_midi_id, "status": audio_midi.status})
-        if task_type == AudioMIDI.Status.YOUTUBE_AUDIO_DOWNLOADED and audio_midi.audio_file:
-            return JsonResponse({"message": "Already processed", "audio_midi_id": audio_midi_id, "status": audio_midi.status})
+def _save_result(audio_midi, audio_midi_id, task_type, result_file):
+    is_midi = task_type == AudioMIDI.Status.COMPLETED
+    if (is_midi and audio_midi.midi_file) or (not is_midi and audio_midi.audio_file):
+        return JsonResponse({
+            "message": "Already processed", "audio_midi_id": audio_midi_id,
+            "status": audio_midi.status,
+        })
 
     if task_type == AudioMIDI.Status.YOUTUBE_AUDIO_DOWNLOADED:
-        audio_midi.audio_file.save(audio_midi.audio_filename, result_file)
+        audio_midi.audio_file.save(audio_midi.audio_filename, result_file, save=False)
     else:
         midi_filename = f"{audio_midi.id}.midi"
-        audio_midi.midi_file.save(midi_filename, result_file)
+        audio_midi.midi_file.save(midi_filename, result_file, save=False)
 
     audio_midi.status = task_type
     audio_midi.error_message = ""
@@ -409,6 +421,18 @@ def audio_status(request, audio_midi_id):
             "total_chunks": audio_midi.total_chunks,
             "error_message": audio_midi.error_message,
         }
+        if audio_midi.status in (AudioMIDI.Status.QUEUED, AudioMIDI.Status.PROCESSING):
+            try:
+                state = get_task_state(audio_midi_id) or {}
+            except RedisError:
+                state = {}
+            if state.get("status") == "retrying":
+                response_data.update(
+                    status="retrying", retry_at=state["retry_at"],
+                    message="Retrying automatically", current_chunk=0, total_chunks=0,
+                )
+            elif state.get("status") == "failed":
+                response_data.update(status="failed", error_message=state.get("error", ""))
         return JsonResponse(response_data, status=200)
 
     except AudioMIDI.DoesNotExist:
