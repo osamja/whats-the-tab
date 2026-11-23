@@ -21,9 +21,9 @@ uploads it through Django's authenticated result callback.
    list such as `VAST_GPU_NAME="RTX 3060,GTX 1080 Ti"`. Validate a private
    audio-to-MIDI job on the GTX 1080 Ti before relying on it for capacity.
    `VAST_DEPLOYMENT_TAG` selects the deployment tag. Set
-   `VAST_MAX_WORKERS` to cap recruitment and `VAST_MIN_LOAD` to set the active
-   performance target. Verify the resulting worker count after the endpoint
-   has been idle.
+   `VAST_MAX_WORKERS` to cap recruitment, `VAST_MIN_LOAD` to set the active
+   performance target, and `VAST_COLD_WORKERS` to keep stopped standby workers.
+   Verify the resulting worker count after the endpoint has been idle.
 3. From the repository root, register the deployment. The pinned SDK uses a
    Python 3.12 API during provisioning. The Django dispatcher and worker
    image use Python 3.11.

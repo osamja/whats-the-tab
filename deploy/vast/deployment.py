@@ -41,7 +41,7 @@ image.env(
 app.configure_autoscaling(
     max_workers=int(os.getenv("VAST_MAX_WORKERS", "1")),
     min_load=float(os.getenv("VAST_MIN_LOAD", "0")),
-    cold_workers=0,
+    cold_workers=int(os.getenv("VAST_COLD_WORKERS", "0")),
     max_queue_time=300.0,
 )
 
