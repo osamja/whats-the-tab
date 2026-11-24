@@ -185,6 +185,35 @@ class WorkerDispatchTests(TestCase):
 
         post.assert_called_once()
 
+    @patch("transcribeapp.management.commands.runworker.mark_failed")
+    @patch("transcribeapp.management.commands.runworker.claim_task")
+    @patch("transcribeapp.management.commands.runworker.heartbeat")
+    @patch("transcribeapp.management.commands.runworker.reap_stale_tasks", return_value=0)
+    @patch(
+        "transcribeapp.management.commands.runworker.download_youtube_audio",
+        side_effect=RuntimeError("ERROR: [youtube] Sign in to confirm you're not a bot"),
+    )
+    def test_youtube_download_error_is_sanitized(
+        self, _download, _reap, _heartbeat, claim, mark_failed
+    ):
+        command = WorkerCommand(stdout=StringIO(), stderr=StringIO())
+
+        def claim_once(_worker_id):
+            command.shutting_down = True
+            return (
+                "77",
+                {"payload": {"type": "youtube_download", "youtube_url": "https://youtu.be/abc"}},
+            )
+
+        claim.side_effect = claim_once
+        with patch.object(command, "_start_heartbeat"), patch("signal.signal"):
+            with self.settings(VAST_ENDPOINT_NAME=""):
+                command.handle()
+
+        mark_failed.assert_called_once_with(
+            "77", "YouTube audio download could not be completed."
+        )
+
 
 class MediaRootTests(TestCase):
     def test_media_root_is_scoped_to_media_directory(self):
@@ -261,6 +290,43 @@ class UploadApiTests(TestCase):
             job = AudioMIDI.objects.get(pk=response.json()["audio_midi_id"])
             with job.audio_file.open("rb") as stored:
                 self.assertEqual(stored.read(), data)
+
+    @override_settings(MAX_AUDIO_DURATION_SECONDS=1)
+    def test_upload_rejects_audio_over_duration_limit_before_saving(self):
+        audio = BytesIO()
+        with wave.open(audio, "wb") as wav:
+            wav.setparams((1, 2, 8000, 0, "NONE", "not compressed"))
+            wav.writeframes(b"\x01\x00" * 16000)
+        response = self.client.post(
+            reverse("upload_audio"),
+            {"audio": SimpleUploadedFile("too-long.wav", audio.getvalue(), "audio/wav")},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("maximum supported length", response.json()["message"])
+        self.assertFalse(AudioMIDI.objects.exists())
+
+    def test_upload_from_youtube_is_disabled_by_default(self):
+        response = self.client.post(
+            reverse("upload_from_youtube"),
+            {"youtube_url": "https://www.youtube.com/watch?v=example"},
+        )
+
+        self.assertEqual(response.status_code, 410)
+        self.assertIn("disabled", response.json()["message"])
+        self.assertFalse(AudioMIDI.objects.exists())
+
+    @override_settings(ENABLE_YOUTUBE_UPLOAD=True)
+    @patch("transcribeapp.views.enqueue_task")
+    def test_upload_from_youtube_enqueues_when_enabled(self, enqueue):
+        response = self.client.post(
+            reverse("upload_from_youtube"),
+            {"youtube_url": "https://www.youtube.com/watch?v=example"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(AudioMIDI.objects.count(), 1)
+        enqueue.assert_called_once()
 
 
 class TranscribeApiTests(TestCase):

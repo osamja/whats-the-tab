@@ -1,4 +1,6 @@
 import hmac
+import json
+import math
 import os
 import shutil
 import subprocess
@@ -22,7 +24,37 @@ UPLOAD_FORMATS = (
 )
 
 
-def _upload_has_decodable_audio(audio_file):
+def _parse_probe_duration(stdout):
+    try:
+        payload = json.loads(stdout)
+    except (TypeError, ValueError):
+        return None
+    candidates = [stream.get("duration") for stream in payload.get("streams", [])]
+    candidates.append((payload.get("format") or {}).get("duration"))
+    for raw in candidates:
+        try:
+            duration = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(duration) and duration > 0:
+            return duration
+    return None
+
+
+def _format_duration_limit_error(duration, max_seconds):
+    if duration >= 60:
+        mins, secs = divmod(int(round(duration)), 60)
+        duration_text = f"{mins}m {secs}s"
+    else:
+        duration_text = f"{duration:.1f}s"
+    if max_seconds >= 60 and max_seconds % 60 == 0:
+        limit_text = f"{max_seconds // 60} minutes"
+    else:
+        limit_text = f"{max_seconds}s"
+    return f"Audio is {duration_text} long; maximum supported length is {limit_text}."
+
+
+def _validate_uploaded_audio(audio_file):
     # Restrict probing to local media containers and decode only the first frame.
     with tempfile.NamedTemporaryFile() as source:
         try:
@@ -44,8 +76,29 @@ def _upload_has_decodable_audio(audio_file):
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            return False
-    return result.returncode == 0 and bool(result.stdout)
+            return False, None
+        if result.returncode != 0 or not result.stdout:
+            return False, None
+
+        duration = None
+        try:
+            probe = subprocess.run(
+                [
+                    "ffprobe", "-v", "error", "-protocol_whitelist", "file",
+                    "-format_whitelist", UPLOAD_FORMATS, "-select_streams", "a:0",
+                    "-show_entries", "stream=duration:format=duration",
+                    "-of", "json", source.name,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            probe = None
+        if probe and probe.returncode == 0:
+            duration = _parse_probe_duration(probe.stdout)
+    return True, duration
 
 
 def health(request):
@@ -163,12 +216,17 @@ def upload_audio(request):
             )
 
         try:
-            readable = _upload_has_decodable_audio(audio_file)
+            readable, duration = _validate_uploaded_audio(audio_file)
         except OSError:
             message = "Audio validation is temporarily unavailable. Please try again."
             return JsonResponse({"error": message, "message": message}, status=503)
         if not readable:
             message = "This file does not contain readable audio. Try exporting a fresh MP3."
+            return JsonResponse({"error": message, "message": message}, status=422)
+        if duration is not None and duration > settings.MAX_AUDIO_DURATION_SECONDS:
+            message = _format_duration_limit_error(
+                duration, settings.MAX_AUDIO_DURATION_SECONDS
+            )
             return JsonResponse({"error": message, "message": message}, status=422)
 
         audio_filename = get_audio_filename()
@@ -193,6 +251,10 @@ def upload_audio(request):
 def upload_from_youtube(request):
     if not _api_request_is_authorized(request):
         return _api_unauthorized_response()
+
+    if not settings.ENABLE_YOUTUBE_UPLOAD:
+        message = "YouTube upload is disabled. Please upload an audio file instead."
+        return JsonResponse({"error": message, "message": message}, status=410)
 
     if request.method == "POST":
         limited = _rate_limit_response(

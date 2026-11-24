@@ -104,10 +104,12 @@ class Command(BaseCommand):
                 self.stderr.write(
                     f"[{self.worker_id}] Task {task_id} failed ({type(exc).__name__})"
                 )
-                message = (
-                    "Transcription could not be completed."
-                    if task_type == "transcribe" else str(exc)
-                )
+                if task_type == "transcribe":
+                    message = "Transcription could not be completed."
+                elif task_type == "youtube_download":
+                    message = "YouTube audio download could not be completed."
+                else:
+                    message = str(exc)
                 mark_failed(task_id, message)
 
             self.current_task_id = None
