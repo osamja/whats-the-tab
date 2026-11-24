@@ -1,13 +1,14 @@
 # Deploying whats-the-tab to a vast.ai instance
 
 This is the runbook for running the API on a fresh vast.ai GPU instance, behind
-the Linode nginx proxy at `pyaar.ai/transcribe/*`.
+the Linode nginx proxy at `pyaar.ai/transcribe/*`. For the current Linode web
+tier and Vast Serverless GPU deployment, see [Vast Serverless GPU setup](vast-serverless.md).
 
 ## Why vast.ai (and not Docker)
 
 vast.ai instances are themselves containers — there is no Docker daemon inside.
 You cannot `docker compose up` on a standard instance. You must run
-`redis-server`, `gunicorn`, and the transcription worker directly on the host
+`redis-server`, `gunicorn`, the Redis subscriber, and the transcription worker directly on the host
 with `uv`.
 
 > vast.ai also offers VM instances that support Docker. This runbook covers the
@@ -18,8 +19,8 @@ with `uv`.
 - **`/app` is not a git repo.** Code is scp'd at instance creation time and
   drifts from `main`. Sync from your local clone before launching, or you'll be
   running stale code.
-- **No process manager.** Nothing restarts services on reboot or crash. If the
-  instance is rebooted, restart redis + gunicorn + the worker manually.
+- **No process manager.** Restart Redis, Gunicorn, the subscriber, and the
+  worker after a reboot or service failure.
   `onstart.sh` is empty by default — populate it if you want auto-start.
 - **Port mapping.** Gunicorn binds to `8008` inside the container. vast maps it
   to a random external port (visible in the vast UI under "Open Ports"). Use the
@@ -81,7 +82,7 @@ file readable only by root:
 cat > /app/.env <<'EOF'
 DEBUG=False
 SECRET_KEY=<generate-a-new-secret>
-DATABASE_URL=<postgres-url-or-leave-unset-for-sqlite>
+# DATABASE_URL=postgresql://user:password@db-host:5432/whatsthetab
 REDIS_URL=redis://localhost:6379
 WEB_URL=http://127.0.0.1:8008
 WORKER_SHARED_SECRET=<generate-a-second-secret>
@@ -90,6 +91,8 @@ ALLOWED_HOSTS=pyaar.ai,127.0.0.1,localhost
 EOF
 chmod 600 /app/.env
 ```
+
+Omit `DATABASE_URL` to use the local SQLite database.
 
 `SECRET_KEY` and `WORKER_SHARED_SECRET` must be different. Generate each with:
 
@@ -123,7 +126,15 @@ disown
 The web process handles HTTP, status polling, and media. It does not load the
 MT3 model.
 
-### 7. Start the transcription worker
+### 7. Start the Redis subscriber and transcription worker
+
+The subscriber consumes Redis lifecycle events and updates the database.
+
+```bash
+cd /app
+nohup uv run python manage.py subscriber > /app/subscriber.log 2>&1 &
+disown
+```
 
 ```bash
 cd /app
@@ -139,8 +150,7 @@ It also reaps tasks left behind by dead workers.
 ### 8. Verify
 
 ```bash
-ps -ef | grep -E "redis|gunicorn|runworker" | grep -v grep
-# Should see: redis-server, gunicorn master+worker, runworker
+pgrep -af 'redis-server|gunicorn|manage.py subscriber|manage.py runworker'
 ```
 
 From outside the instance (using the vast-mapped external port for `8008`):
@@ -200,6 +210,7 @@ curl https://pyaar.ai/transcribe/
 |---|---|---|
 | `redis-server *:6379` | 1 | Queue and pub/sub broker |
 | `gunicorn ... musictranscription.wsgi` | master + 1 worker | HTTP API on `:8008` |
+| `python manage.py subscriber` | 1 | Persists Redis lifecycle events |
 | `python manage.py runworker` | 1 | Long-running transcription jobs, progress, result upload |
 
 GPU memory usage is dominated by the worker. The gunicorn worker only handles
