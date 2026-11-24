@@ -24,6 +24,8 @@ _Last updated: 2026-11-24_
 - [x] Added `VAST_COLD_WORKERS` support and configured 2 warm + 2 cold standby workers on endpoint `45874`
 - [x] Reject over-duration (`> MAX_AUDIO_DURATION_SECONDS`) uploads immediately at `/transcribe/upload/` (HTTP 422) before S3 upload or GPU dispatch
 - [x] Disabled `/transcribe/upload_from_yt/` by default (`ENABLE_YOUTUBE_UPLOAD=False`, HTTP 410) and sanitized worker YouTube download errors
+- [x] Deleted 8 unused Vast deployments (`5788`–`6142`), removed orphan Docker container `whatsthetab-linode-dispatcher-1080`, cleaned `/tmp` rollout artifacts, and scheduled daily `manage.py prune_jobs --days 7` cron
+- [x] Synced `pyaar-ai-website` to `origin/main`, removed the disabled YouTube upload UI, surfaced the 10-minute / 20 MB upload limits, and added instant client-side audio duration validation
 
 ## Production Observations (First 22h on Retry Release)
 
@@ -33,11 +35,7 @@ _Last updated: 2026-11-24_
 
 ## Next / Open Items
 
-1. **Ops & Cost Hygiene**
-   - Delete 8 unused old Vast deployments (`5788`–`6142`) so only the active production deployment remains.
-   - Remove orphan Docker container `whatsthetab-linode-dispatcher-1080` and clean up old `/tmp/whatsthetab-*` / `/tmp/pyaar-retry-release-*` rollout artifacts once rollback is no longer needed.
+1. **Cost & Cold-Worker Tuning**
    - Monitor cold worker availability (one stopped cold worker went `unavail` when its host GPU was rented) and evaluate cost vs. latency (currently ~$93/mo for 2 always-on RTX 3060s at ~15 jobs/day).
-2. **Frontend Repo Hygiene**
-   - Sync `/home/sammy/workspace/pyaar-ai-website` with `origin/main` (currently 7 commits behind with local edits in `public/llms.txt` and `src/App.js`) and surface the 10-minute audio duration limit directly in the upload UI.
-3. **Future Product Ideas**
+2. **Future Product Ideas**
    - Decide whether to support >10 minute songs (e.g., audio chunking or raising `MAX_AUDIO_DURATION_SECONDS`) if over-limit upload rejections remain common.
